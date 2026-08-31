@@ -1,0 +1,35 @@
+name: Verify patches
+
+# Checks that every patch in the Arc layer still matches the Chromium version
+# this repo targets. Takes seconds and downloads a handful of files, so it can
+# run on every push instead of waiting for a build to find out.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Verify the Arc layer against the targeted Chromium
+        run: bash tools/verify_patches.sh
+
+      - name: Verify the Arc layer against the latest Vanadium
+        continue-on-error: true
+        run: |
+          # Vanadium tracks Chromium releases, so its newest tag is the version
+          # this repo will move to next. Failing here is a heads-up that the
+          # next bump needs re-anchoring, not a broken build, so it does not
+          # fail the run.
+          cd vanadium
+          git fetch --tags --quiet
+          git checkout --quiet "$(git tag | sort -V | tail -n1)"
+          cd ..
+          bash tools/verify_patches.sh

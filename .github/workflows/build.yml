@@ -39,10 +39,15 @@ jobs:
           fi
 
       - name: Set ENV
-        run: | 
+        run: |
           chmod +x *.sh
           echo "unix_time=$(date +%s)" >> $GITHUB_ENV
-    
+
+      # Cheap check before an expensive build: if the Vanadium bump above moved
+      # Chromium out from under the Arc layer, fail here rather than hours in.
+      - name: Verify patches
+        run: bash tools/verify_patches.sh
+
       - name: Build
         env:
             DEBIAN_FRONTEND: noninteractive

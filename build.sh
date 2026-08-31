@@ -1,7 +1,7 @@
 #!/bin/bash
 source common.sh
 set_keys
-export VERSION=$(grep -m1 -o '[0-9]\+\(\.[0-9]\+\)\{3\}' vanadium/args.gn)
+export VERSION=$(chromium_version)
 export CHROMIUM_SOURCE=https://chromium.googlesource.com/chromium/src.git # https://github.com/chromium/chromium.git
 export DEBIAN_FRONTEND=noninteractive
 sudo apt-get update
@@ -34,6 +34,7 @@ gclient runhooks
 ./build/install-build-deps.sh --no-prompt
 
 source $SCRIPT_DIR/patch.sh
+source $SCRIPT_DIR/arc.sh
 cp $SCRIPT_DIR/args.gn out/Default/args.gn
 gn gen out/Default # gn args out/Default; echo 'treat_warnings_as_errors = false' >> out/Default/args.gn
 mkdir -p out/tmp out/release

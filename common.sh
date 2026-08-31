@@ -1,4 +1,24 @@
-export SCRIPT_DIR=$(realpath $(dirname $0))
+export SCRIPT_DIR=$(realpath $(dirname ${BASH_SOURCE[0]}))
+
+# Read-only mirror of the Chromium tree, used to check patches against a
+# version without cloning it. The build itself still clones from the canonical
+# source in build.sh.
+export CHROMIUM_MIRROR=${CHROMIUM_MIRROR:-https://raw.githubusercontent.com/chromium/chromium}
+
+# Which Chromium version this repo targets, in precedence order:
+#   $CHROMIUM_VERSION      one-off override, for trying a version out
+#   chromium.version       a pin checked into the repo
+#   vanadium/args.gn       whatever the Vanadium submodule is on (the default)
+chromium_version() {
+    if [ -n "${CHROMIUM_VERSION:-}" ]; then
+        echo "$CHROMIUM_VERSION"
+    elif [ -s "$SCRIPT_DIR/chromium.version" ]; then
+        grep -m1 -oE '[0-9]+(\.[0-9]+){3}' "$SCRIPT_DIR/chromium.version"
+    else
+        # Empty if the submodule is not checked out; callers report that.
+        grep -m1 -oE '[0-9]+(\.[0-9]+){3}' "$SCRIPT_DIR/vanadium/args.gn" 2>/dev/null
+    fi
+}
 
 replace() {
     export org=$2 new=$3
