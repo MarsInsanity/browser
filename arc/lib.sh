@@ -12,6 +12,10 @@
 # The same declarations let tools/verify_patches.sh check the whole layer
 # against any Chromium tag over the network, without a checkout or a build.
 #
+# Larger changes, which do not read well as a sed expression, are unified diffs
+# in arc/patches/ applied through arc_apply_patch. `git apply` refuses a patch
+# whose context has drifted, which gives those the same property.
+#
 # Modes, via $ARC_MODE:
 #   apply  (default) verify the anchor, edit the file, verify the result
 #   check            verify the anchor only, against a pristine tree
@@ -67,6 +71,57 @@ arc_patch() {
         arc_log "FAIL $desc"
         arc_log "     anchor matched but the edit did not take in $file"
         arc_log "     expected: $result"
+        ARC_FAILURES=$((ARC_FAILURES + 1))
+        return 1
+    fi
+
+    ARC_APPLIED=$((ARC_APPLIED + 1))
+    arc_log "ok   $desc"
+}
+
+# arc_apply_patch <description> <patch-file>
+#
+# For changes that are too large to read as a sed expression. The patch is a
+# unified diff against pristine Chromium, applied with `git apply`, which
+# refuses a patch whose context has drifted rather than applying half of it.
+# That gives the same fail-loudly property as arc_patch's anchor, so a Chromium
+# bump that moves the surrounding code stops the build.
+#
+# Prefer adding a file over editing one: a file Chromium does not have cannot
+# conflict on a bump, so only its one-line registration in a BUILD.gn or .gni
+# can break, and that is an arc_patch with an anchor. See docs/ROADMAP.md.
+arc_apply_patch() {
+    local desc=$1 patch=$2
+
+    if [ "$ARC_MODE" = list ]; then
+        # The files this patch needs, so verify_patches.sh knows to fetch them.
+        sed -n 's|^+++ b/||p' "$patch"
+        return 0
+    fi
+
+    if [ ! -f "$patch" ]; then
+        arc_log "FAIL $desc"
+        arc_log "     missing patch: $patch"
+        ARC_FAILURES=$((ARC_FAILURES + 1))
+        return 1
+    fi
+
+    if ! git apply --check -p1 "$patch" 2>/dev/null; then
+        arc_log "FAIL $desc"
+        arc_log "     patch no longer applies: $patch"
+        arc_log "     Chromium most likely moved the code around it"
+        ARC_FAILURES=$((ARC_FAILURES + 1))
+        return 1
+    fi
+
+    if [ "$ARC_MODE" = check ]; then
+        arc_log "ok   $desc"
+        return 0
+    fi
+
+    if ! git apply -p1 "$patch"; then
+        arc_log "FAIL $desc"
+        arc_log "     patch checked out clean but did not apply: $patch"
         ARC_FAILURES=$((ARC_FAILURES + 1))
         return 1
     fi
