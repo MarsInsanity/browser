@@ -1,15 +1,16 @@
 --- a/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalTabListCoordinator.java
 +++ b/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalTabListCoordinator.java
-@@ -18,6 +18,8 @@
+@@ -18,6 +18,9 @@
  import android.view.View;
  import android.view.ViewGroup;
  import android.view.ViewStub;
++import android.widget.HorizontalScrollView;
 +import android.widget.LinearLayout;
 +import android.widget.TextView;
  
  import androidx.annotation.VisibleForTesting;
  import androidx.recyclerview.widget.GridLayoutManager;
-@@ -113,6 +115,13 @@
+@@ -113,6 +116,18 @@
      private static @Nullable Supplier<TabSwitcherDragHandler>
              sTabSwitcherDragHandlerSupplierForTesting;
      private final VerticalTabRailLayout mContainerView;
@@ -19,11 +20,16 @@
 +    private @Nullable Token mActiveSpace;
 +
 +    private @Nullable LinearLayout mSpacesBar;
++    private @Nullable HorizontalScrollView mSpacesScroll;
 +    private @Nullable SimpleRecyclerViewAdapter mAdapter;
++
++    // Trackpad scroll arrives as a stream of small deltas, so it is accumulated until it is
++    // worth a Space change and then reset.
++    private float mSpaceScrollAccumulator;
      private final TabListFaviconProvider mTabListFaviconProvider;
      private final TabListModel mModelList;
      private final TabListMediator mMediator;
-@@ -243,6 +252,11 @@
+@@ -243,6 +258,11 @@
                      @Override
                      public int getItemViewType(int position) {
                          ListItem item = mModelList.get(position);
@@ -35,16 +41,17 @@
                          if (item.type == UiType.TAB) {
                              if (TabProperties.isPinnedTab(item.model)) {
                                  return UiType.PINNED_TAB;
-@@ -299,6 +313,8 @@
+@@ -299,6 +319,9 @@
          mContainerView.setLayoutParams(
                  new ViewGroup.LayoutParams(
                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 +        mAdapter = adapter;
 +        mSpacesBar = mContainerView.findViewById(R.id.arc_spaces_bar);
++        mSpacesScroll = mContainerView.findViewById(R.id.arc_spaces_scroll);
  
          @SuppressWarnings("NullAway")
          Supplier<@Nullable TabContentManager> nullableSupplier = tabContentManagerSupplier;
-@@ -616,7 +632,15 @@
+@@ -616,7 +639,15 @@
          mTabModelSelectorTabModelObserver =
                  new TabModelSelectorTabModelObserver(tabModelSelector) {
                      @Override
@@ -60,7 +67,7 @@
                          if (mIsActive) {
                              scrollActiveTabIntoView();
                          }
-@@ -631,6 +655,7 @@
+@@ -631,6 +662,7 @@
                      @Override
                      public void tabClosureCommitted(Tab tab) {
                          mTabHoverCardController.hideHoverCard();
@@ -68,7 +75,29 @@
                      }
  
                      @Override
-@@ -802,12 +827,85 @@
+@@ -639,6 +671,8 @@
+                     }
+                 };
+ 
++        setupSpaceSwitchGestures(activity, mRecyclerView);
++
+         mVerticalTabsActiveSupplier.addSyncObserverAndCallIfNonNull(mActiveObserver);
+ 
+         // Context menus should not appear upon right-clicking the new tab button or the collapse
+@@ -719,6 +753,12 @@
+     void setRailCollapseState(@RailCollapseState int railCollapseState) {
+         mContainerModel.set(VerticalTabListProperties.COLLAPSE_STATE, railCollapseState);
+         updatePinnedLayoutSpanCount();
++        if (mSpacesScroll != null) {
++            // There is no room for Space names in a 76dp rail, and a clipped row of them reads
++            // as breakage. Hide it with the other labels; the Space stays open regardless.
++            mSpacesScroll.setVisibility(
++                    railCollapseState == RailCollapseState.COLLAPSED ? View.GONE : View.VISIBLE);
++        }
+         mCollapseController.setRailCollapseStateSupplierValue(railCollapseState);
+     }
+ 
+@@ -802,12 +842,171 @@
                  /* tabGroupSyncIds */ null,
                  /* quickMode */ false);
          mPinnedTabsMediator.updateTabModel(tabModel);
@@ -101,11 +130,36 @@
 +    /** Shows one Space, or all of them when spaceId is null. */
 +    private void applySpace(@Nullable Token spaceId) {
 +        mActiveSpace = spaceId;
++        TabModel tabModel = mTabModelSelector.getCurrentModel();
++        if (tabModel != null && spaceId != null && tabModel.getTabGroupCollapsed(spaceId)) {
++            // Entering a Space that was left collapsed would show its header and nothing else.
++            tabModel.setTabGroupCollapsed(spaceId, /* isCollapsed= */ false, /* animate= */ true);
++        }
 +        if (mAdapter != null) {
 +            // View types are what decide which rows render, so they have to be re-evaluated.
 +            mAdapter.notifyDataSetChanged();
 +        }
 +        refreshSpacesBar();
++    }
++
++    /** The Spaces in chip order: all tabs first, then each group. */
++    private List<Token> spacesInOrder(TabModel tabModel) {
++        List<Token> spaces = new ArrayList<>();
++        spaces.add(null);
++        spaces.addAll(tabModel.getAllTabGroupIds());
++        return spaces;
++    }
++
++    /** Moves to the Space `delta` places along, stopping at either end rather than wrapping. */
++    private void stepSpace(int delta) {
++        TabModel tabModel = mTabModelSelector.getCurrentModel();
++        if (tabModel == null) return;
++        List<Token> spaces = spacesInOrder(tabModel);
++        int current = spaces.indexOf(mActiveSpace);
++        if (current < 0) current = 0;
++        int next = current + delta;
++        if (next < 0 || next >= spaces.size()) return;
++        applySpace(spaces.get(next));
 +    }
 +
 +    private void refreshSpacesBar() {
@@ -148,6 +202,67 @@
 +        return chip;
 +    }
 +
++    /**
++     * Lets a sideways swipe or a two-finger trackpad scroll over the tab list move between
++     * Spaces, which is how Arc does it.
++     *
++     * <p>Safe to put here: the rail's ItemTouchHelper declares no swipe directions and its
++     * onSwiped is empty, so horizontal gestures over a row mean nothing today. The touch
++     * listener only observes — it never reports the event as handled, so scrolling, dragging
++     * and tapping carry on as before.
++     */
++    private void setupSpaceSwitchGestures(Activity activity, RecyclerView recyclerView) {
++        GestureDetector detector =
++                new GestureDetector(
++                        activity,
++                        new GestureDetector.SimpleOnGestureListener() {
++                            @Override
++                            public boolean onFling(
++                                    MotionEvent start,
++                                    MotionEvent end,
++                                    float velocityX,
++                                    float velocityY) {
++                                if (start == null || end == null) return false;
++                                // Ignore anything that is mostly a vertical scroll.
++                                if (Math.abs(velocityX) < Math.abs(velocityY) * 1.5f) return false;
++                                float travel = end.getX() - start.getX();
++                                float minTravel =
++                                        mContainerView.getResources().getDisplayMetrics().density
++                                                * 48;
++                                if (Math.abs(travel) < minTravel) return false;
++                                stepSpace(travel < 0 ? 1 : -1);
++                                return false;
++                            }
++                        });
++
++        recyclerView.addOnItemTouchListener(
++                new RecyclerView.OnItemTouchListener() {
++                    @Override
++                    public boolean onInterceptTouchEvent(RecyclerView rv, MotionEvent e) {
++                        detector.onTouchEvent(e);
++                        return false;
++                    }
++
++                    @Override
++                    public void onTouchEvent(RecyclerView rv, MotionEvent e) {}
++
++                    @Override
++                    public void onRequestDisallowInterceptTouchEvent(boolean disallow) {}
++                });
++
++        recyclerView.setOnGenericMotionListener(
++                (v, event) -> {
++                    if (event.getAction() != MotionEvent.ACTION_SCROLL) return false;
++                    float horizontal = event.getAxisValue(MotionEvent.AXIS_HSCROLL);
++                    if (horizontal == 0f) return false;
++                    mSpaceScrollAccumulator += horizontal;
++                    if (Math.abs(mSpaceScrollAccumulator) < 1.0f) return false;
++                    stepSpace(mSpaceScrollAccumulator > 0 ? 1 : -1);
++                    mSpaceScrollAccumulator = 0f;
++                    return true;
++                });
++    }
++
      private void handleNewTabButtonClick() {
 +        // A new tab belongs to no Space, so it would open into a rail that is not showing it.
 +        applySpace(null);
@@ -170,7 +285,7 @@
          android:layout_marginBottom="@dimen/vertical_tabs_new_tab_button_margin_bottom"/>
  
 +    <!-- Spaces switcher. Scrolls sideways so a long list of Spaces cannot push
-+         the rail wider than it is. -->
++         the rail wider than it is, and is hidden entirely when the rail collapses. -->
 +    <HorizontalScrollView
 +        android:id="@+id/arc_spaces_scroll"
 +        android:layout_width="match_parent"
