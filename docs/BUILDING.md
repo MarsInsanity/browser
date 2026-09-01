@@ -68,14 +68,66 @@ change turns around in half an hour.
 
 Do not build in a NAS operating system's own userland — Synology DSM and its
 kin are not Debian and `install-build-deps.sh` will not run there. Use a
-container:
+container.
 
-```shell
-docker run -d --name browser-build -v /volume1/build:/work ubuntu:24.04 sleep infinity
+### Storage first
+
+Put the build on SSD, and prefer a real volume over a cache. Synology's SSD
+cache accelerates reads of data the array has seen before, which is the wrong
+shape for this: a build's cost is writing hundreds of thousands of new object
+files, and those are misses by definition. An SSD used as cache in front of an
+HDD array is worth far less here than the same SSD carrying a storage pool the
+build lives on. DSM 7.2 and later can make a storage pool out of M.2 drives on
+most models, and custom DSM installs have no such restriction at all.
+
+Whatever it lands on, that filesystem needs ~150GB free.
+
+### The container
+
+In **Container Manager → Project**, create a project and paste this, adjusting
+the path to a directory on the fast volume:
+
+```yaml
+services:
+  browser-build:
+    image: ubuntu:24.04
+    container_name: browser-build
+    command: sleep infinity
+    restart: unless-stopped
+    working_dir: /work
+    volumes:
+      - /volume1/build:/work
 ```
 
-Point the volume at SSD or NVMe storage if there is any, for the reason in the
-table above, and confirm the container has the full ~150GB.
+`sleep infinity` is the point of the thing: the container is a place to run
+long builds from a shell, not a service, and without a foreground process it
+would exit immediately. `restart: unless-stopped` brings it back after a DSM
+reboot. Do not set a memory limit — the link steps want everything they can
+get, and 48GB is a luxury here rather than a risk.
+
+Then open a shell into it (**Container Manager → Container → browser-build →
+Details → Terminal**, or `docker exec -it browser-build bash` over SSH) and
+bootstrap it:
+
+```shell
+apt-get update && apt-get install -y sudo git curl python3 bzip2 file lsb-release ca-certificates
+```
+
+`sudo` is on that list because `build.sh` calls it and a stock Ubuntu image has
+no such command, so the build would fail on its first line as root. `bzip2` is
+there for the reason in [Things that go wrong](#things-that-go-wrong) — install
+it *before* the first sync, not after.
+
+From there it is the ordinary build, run from `/work` so the checkout lands on
+the volume you chose:
+
+```shell
+git clone --recurse-submodules <your fork> && cd browser && ARCHS=arm64 ./build.sh
+```
+
+Give it the signing environment first, the same as anywhere else, and run it
+under `nohup` or `tmux` — a shell opened through Container Manager's web
+terminal will not outlive the browser tab.
 
 To have CI drive it, register the machine as a self-hosted runner and run
 **Build** against it. `build.yml` triggers only on schedule and manual
