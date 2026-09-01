@@ -71,6 +71,22 @@ to carry forward: `kUniversalKeyboardHandling` (shortcuts and focus traversal),
 `kToolbarTabletResizeRefactor` (toolbar reflow on window resize) and
 `kAndroidThemeModule`.
 
+### `arc/40-pinned.sh` — pinned tabs
+
+Chromium 152 already implements pinned tabs in the rail: a separate
+`RecyclerView` above the tab list, laid out by a `GridLayoutManager` as
+icon-only 42dp squares, with pin and unpin in the tab context menu and a drag
+constraint that forbids moving a tab across the pinned/unpinned boundary.
+
+What differs from Arc is the column count. Upstream derives it from the
+measured rail width and clamps it to at most four, so it reflows as the window
+changes and can collapse to one column. Two patches hold it at three columns
+whenever the rail is expanded; the collapsed rail still drops to a single
+column through the separate `COLLAPSED_GRID_SPAN_COUNT` branch.
+
+Not yet done: a pinned tab does not return to the URL it was pinned at. See
+[ROADMAP.md](ROADMAP.md).
+
 ### `arc/30-appearance.sh` — appearance and tab organisation
 
 - `kAndroidSurfaceColorUpdate`, `kGridTabSwitcherSurfaceColorUpdate` — flat,
