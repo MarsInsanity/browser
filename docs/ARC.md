@@ -126,11 +126,21 @@ because the sidebar is native here.
 
 ## Branding
 
-The app's name, icon and package ID are inherited from the upstream project and
-deliberately not changed. Naming a browser after Arc would misrepresent whose
-product it is, and changing the package ID would break updates for anyone
-already running a build from this repo.
+The app installs as `com.magiclabs.marsbrowser` and is called **Mars Browser**,
+so it sits alongside Titanium rather than replacing it and Titanium can stay
+the default browser. `arc/60-identity.sh` sets the visible name; `args.gn` sets
+the package ID.
 
-To rebrand a private build, set `chrome_public_manifest_package` in `args.gn`
-to your own ID. Do that before your first release, not after — Android treats a
-new package ID as a different app, and installs will not update across it.
+It is deliberately not named after Arc. This is Chromium arranged the way Arc
+arranges a browser, not their product, and naming it theirs would misrepresent
+whose it is.
+
+The icon is still Titanium's, and the internal naming — resource directories,
+identifiers — is still `titanium`, because `build.sh` rewrites Vanadium's
+patches to that name before applying them. Renaming those would mean a build
+from scratch for no visible change, so only the strings a user actually reads
+are patched.
+
+Change the package ID before a release, never after. Android keys an installed
+app on it, so a new ID is a new app and existing installs will not update
+across the change.
