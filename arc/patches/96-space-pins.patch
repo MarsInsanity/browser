@@ -1,0 +1,141 @@
+--- a/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/PinnedTabClosureManager.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/PinnedTabClosureManager.java
+@@ -10,6 +10,7 @@
+ import androidx.annotation.VisibleForTesting;
+ 
+ import org.chromium.base.ContextUtils;
++import org.chromium.base.Token;
+ import org.chromium.base.task.PostTask;
+ import org.chromium.base.task.TaskTraits;
+ import org.chromium.build.annotations.NullMarked;
+@@ -128,10 +129,45 @@
+         pinnedHomePrefs().edit().putString(String.valueOf(tab.getId()), url.getSpec()).apply();
+     }
+ 
++    /**
++     * Records the Space a tab belonged to when it was pinned. Pinning ungroups a tab, so this
++     * has to be called before that happens, and it is the only record left of where the tab
++     * came from. A null space means the tab was pinned from "All" and is a Favorite.
++     */
++    public void recordPinnedSpace(int tabId, @Nullable Token space) {
++        String key = spaceKey(tabId);
++        if (space == null) {
++            pinnedHomePrefs().edit().remove(key).apply();
++            return;
++        }
++        pinnedHomePrefs().edit().putString(key, space.getHigh() + ":" + space.getLow()).apply();
++    }
++
++    /** The Space a pinned tab belongs to, or null if it is a Favorite shown in every Space. */
++    public @Nullable Token getPinnedSpace(int tabId) {
++        String value = pinnedHomePrefs().getString(spaceKey(tabId), null);
++        if (value == null) return null;
++        int separator = value.indexOf(':');
++        if (separator <= 0) return null;
++        try {
++            return new Token(
++                    Long.parseLong(value.substring(0, separator)),
++                    Long.parseLong(value.substring(separator + 1)));
++        } catch (NumberFormatException e) {
++            // A malformed entry is not worth crashing over; treat it as a Favorite.
++            return null;
++        }
++    }
++
++    private static String spaceKey(int tabId) {
++        return "space_" + tabId;
++    }
++
+     /** Forgets a tab's pinned URL, for when it stops being pinned. */
+     public void forgetPinnedHome(int tabId) {
+         mPinnedHomeUrls.remove(tabId);
+         pinnedHomePrefs().edit().remove(String.valueOf(tabId)).apply();
++        pinnedHomePrefs().edit().remove(spaceKey(tabId)).apply();
+     }
+ 
+     /**
+--- a/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/TabCollectionTabModelImpl.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/TabCollectionTabModelImpl.java
+@@ -691,6 +691,10 @@
+         if (tab == null) return;
+         if (tab.getIsPinned()) return;
+ 
++        // Pinning ungroups the tab, so the Space it belonged to has to be taken now or it is
++        // gone. A tab pinned outside any Space records nothing and is a Favorite.
++        PinnedTabClosureManager.getInstance().recordPinnedSpace(tabId, tab.getTabGroupId());
++
+         TabPinnerActionListener listener =
+                 new TabPinnerActionListener(
+                         () -> updatePinnedState(tabId, /* isPinned= */ true),
+--- a/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/StaticPinnedTabsMediator.java
++++ b/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/StaticPinnedTabsMediator.java
+@@ -6,7 +6,10 @@
+ 
+ import org.chromium.build.annotations.NullMarked;
+ import org.chromium.build.annotations.Nullable;
++import org.chromium.base.Token;
++import org.chromium.base.supplier.Supplier;
+ import org.chromium.chrome.browser.tab.Tab;
++import org.chromium.chrome.browser.tabmodel.PinnedTabClosureManager;
+ import org.chromium.chrome.browser.tabmodel.TabModel;
+ import org.chromium.chrome.browser.tabmodel.TabModelObserver;
+ import org.chromium.ui.modelutil.ListObservable;
+@@ -27,6 +30,10 @@
+ public class StaticPinnedTabsMediator {
+     private @Nullable TabModel mTabModel;
+     private final TabListModel mMainModelList;
++
++    // Where the open Space is read from, set by the rail. Null until then, which shows
++    // everything — the right answer before anything has told us otherwise.
++    private @Nullable Supplier<Token> mActiveSpaceSupplier;
+     private final TabListModel mPinnedModelList;
+     private final TabModelObserver mTabModelObserver;
+     private final ListObservable.ListObserver<Void> mMainListObserver;
+@@ -177,11 +184,38 @@
+         updatePinnedTabsList();
+     }
+ 
++    /** Sets where the open Space is read from, and rebuilds against it. */
++    public void setActiveSpaceSupplier(Supplier<Token> supplier) {
++        mActiveSpaceSupplier = supplier;
++        updatePinnedTabsList();
++    }
++
++    /** Rebuilds the strip, for when the open Space changes. */
++    public void refreshForActiveSpace() {
++        updatePinnedTabsList();
++    }
++
++    /**
++     * Whether a pinned tab belongs in the strip as it stands.
++     *
++     * <p>A tab pinned while a Space was open belongs to that Space. One pinned from "All" has
++     * no Space recorded and is a Favorite, shown from everywhere. Arc draws the same line
++     * between Favorites and a Space's own pinned tabs.
++     */
++    private boolean belongsInOpenSpace(ListItem item) {
++        int tabId = TabProperties.getTabId(item.model);
++        if (tabId == Tab.INVALID_TAB_ID) return true;
++        Token pinnedSpace = PinnedTabClosureManager.getInstance().getPinnedSpace(tabId);
++        if (pinnedSpace == null) return true;
++        Token openSpace = mActiveSpaceSupplier == null ? null : mActiveSpaceSupplier.get();
++        return pinnedSpace.equals(openSpace);
++    }
++
+     private void updatePinnedTabsList() {
+         mPinnedModelList.clear();
+         for (int i = 0; i < mMainModelList.size(); i++) {
+             ListItem item = mMainModelList.get(i);
+-            if (TabProperties.isPinnedTab(item.model)) {
++            if (TabProperties.isPinnedTab(item.model) && belongsInOpenSpace(item)) {
+                 mPinnedModelList.add(item);
+             }
+         }
+@@ -190,6 +224,7 @@
+ 
+     private void addListItemToPinnedModelList(ListItem item) {
+         if (mPinnedModelList.indexOf(item) != TabModel.INVALID_TAB_INDEX) return;
++        if (!belongsInOpenSpace(item)) return;
+ 
+         int insertionIndex = mPinnedModelList.size();
+         if (mTabModel != null) {

@@ -132,7 +132,15 @@
  
          @SuppressWarnings("NullAway")
          Supplier<@Nullable TabContentManager> nullableSupplier = tabContentManagerSupplier;
-@@ -616,7 +697,15 @@
+@@ -575,6 +656,7 @@
+                         mModelList,
+                         pinnedTabsModelList,
+                         this::updatePinnedTabsVisibility);
++        mPinnedTabsMediator.setActiveSpaceSupplier(() -> mActiveSpace);
+         updatePinnedTabsVisibility();
+ 
+         mTabModelSelectorObserver =
+@@ -616,7 +698,15 @@
          mTabModelSelectorTabModelObserver =
                  new TabModelSelectorTabModelObserver(tabModelSelector) {
                      @Override
@@ -148,7 +156,7 @@
                          if (mIsActive) {
                              scrollActiveTabIntoView();
                          }
-@@ -631,14 +720,24 @@
+@@ -631,14 +721,24 @@
                      @Override
                      public void tabClosureCommitted(Tab tab) {
                          mTabHoverCardController.hideHoverCard();
@@ -173,7 +181,7 @@
          mVerticalTabsActiveSupplier.addSyncObserverAndCallIfNonNull(mActiveObserver);
  
          // Context menus should not appear upon right-clicking the new tab button or the collapse
-@@ -687,6 +786,10 @@
+@@ -687,6 +787,10 @@
          }
  
          mSpineDecoration.destroy();
@@ -184,7 +192,7 @@
          mTabModelSelectorTabModelObserver.destroy();
          mVerticalTabsActiveSupplier.removeObserver(mActiveObserver);
          for (TabSwitcherDragHandler dragHandler : mTabSwitcherDragHandlers) {
-@@ -719,6 +822,12 @@
+@@ -719,6 +823,12 @@
      void setRailCollapseState(@RailCollapseState int railCollapseState) {
          mContainerModel.set(VerticalTabListProperties.COLLAPSE_STATE, railCollapseState);
          updatePinnedLayoutSpanCount();
@@ -197,7 +205,7 @@
          mCollapseController.setRailCollapseStateSupplierValue(railCollapseState);
      }
  
-@@ -802,12 +911,245 @@
+@@ -802,12 +912,248 @@
                  /* tabGroupSyncIds */ null,
                  /* quickMode */ false);
          mPinnedTabsMediator.updateTabModel(tabModel);
@@ -246,6 +254,9 @@
 +            // View types are what decide which rows render, so they have to be re-evaluated.
 +            mAdapter.notifyDataSetChanged();
 +        }
++        // The pinned strip is built by its own mediator from its own list, so it does not
++        // follow the view types above and has to be told separately.
++        mPinnedTabsMediator.refreshForActiveSpace();
 +        refreshSpacesBar();
 +    }
 +
