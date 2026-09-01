@@ -18,7 +18,7 @@
  import org.chromium.chrome.browser.tabmodel.TabModelSelector;
  import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
  import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
-@@ -113,6 +117,50 @@
+@@ -113,6 +117,60 @@
      private static @Nullable Supplier<TabSwitcherDragHandler>
              sTabSwitcherDragHandlerSupplierForTesting;
      private final VerticalTabRailLayout mContainerView;
@@ -61,6 +61,16 @@
 +                public void committedTabGroupClosure(Token tabGroupId, boolean wasHiding) {
 +                    refreshSpacesBar();
 +                }
++
++                // The one that catches a Space disappearing because its last tab was closed.
++                // Closing a tab is undoable, so the tab-level "closure committed" callback only
++                // arrives once the undo window has expired, leaving the chips stale until then;
++                // this fires when the group actually leaves the model.
++                @Override
++                public void didRemoveTabGroup(
++                        int oldRootId, Token oldTabGroupId, int removalReason) {
++                    refreshSpacesBar();
++                }
 +            };
 +
 +    // Trackpad scroll arrives as a stream of small deltas, so it is accumulated until it is
@@ -69,7 +79,7 @@
      private final TabListFaviconProvider mTabListFaviconProvider;
      private final TabListModel mModelList;
      private final TabListMediator mMediator;
-@@ -243,6 +291,11 @@
+@@ -243,6 +301,11 @@
                      @Override
                      public int getItemViewType(int position) {
                          ListItem item = mModelList.get(position);
@@ -81,7 +91,7 @@
                          if (item.type == UiType.TAB) {
                              if (TabProperties.isPinnedTab(item.model)) {
                                  return UiType.PINNED_TAB;
-@@ -299,6 +352,9 @@
+@@ -299,6 +362,9 @@
          mContainerView.setLayoutParams(
                  new ViewGroup.LayoutParams(
                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -91,7 +101,7 @@
  
          @SuppressWarnings("NullAway")
          Supplier<@Nullable TabContentManager> nullableSupplier = tabContentManagerSupplier;
-@@ -616,7 +672,15 @@
+@@ -616,7 +682,15 @@
          mTabModelSelectorTabModelObserver =
                  new TabModelSelectorTabModelObserver(tabModelSelector) {
                      @Override
@@ -107,7 +117,7 @@
                          if (mIsActive) {
                              scrollActiveTabIntoView();
                          }
-@@ -631,6 +695,7 @@
+@@ -631,6 +705,7 @@
                      @Override
                      public void tabClosureCommitted(Tab tab) {
                          mTabHoverCardController.hideHoverCard();
@@ -115,7 +125,7 @@
                      }
  
                      @Override
-@@ -639,6 +704,8 @@
+@@ -639,6 +714,8 @@
                      }
                  };
  
@@ -124,7 +134,7 @@
          mVerticalTabsActiveSupplier.addSyncObserverAndCallIfNonNull(mActiveObserver);
  
          // Context menus should not appear upon right-clicking the new tab button or the collapse
-@@ -687,6 +754,10 @@
+@@ -687,6 +764,10 @@
          }
  
          mSpineDecoration.destroy();
@@ -135,7 +145,7 @@
          mTabModelSelectorTabModelObserver.destroy();
          mVerticalTabsActiveSupplier.removeObserver(mActiveObserver);
          for (TabSwitcherDragHandler dragHandler : mTabSwitcherDragHandlers) {
-@@ -719,6 +790,12 @@
+@@ -719,6 +800,12 @@
      void setRailCollapseState(@RailCollapseState int railCollapseState) {
          mContainerModel.set(VerticalTabListProperties.COLLAPSE_STATE, railCollapseState);
          updatePinnedLayoutSpanCount();
@@ -148,7 +158,7 @@
          mCollapseController.setRailCollapseStateSupplierValue(railCollapseState);
      }
  
-@@ -802,12 +879,209 @@
+@@ -802,12 +889,209 @@
                  /* tabGroupSyncIds */ null,
                  /* quickMode */ false);
          mPinnedTabsMediator.updateTabModel(tabModel);
