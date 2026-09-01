@@ -18,7 +18,7 @@
  import org.chromium.chrome.browser.tabmodel.TabModelSelector;
  import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
  import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
-@@ -113,6 +117,60 @@
+@@ -113,6 +117,64 @@
      private static @Nullable Supplier<TabSwitcherDragHandler>
              sTabSwitcherDragHandlerSupplierForTesting;
      private final VerticalTabRailLayout mContainerView;
@@ -31,6 +31,10 @@
 +    private @Nullable HorizontalScrollView mSpacesScroll;
 +    private @Nullable SimpleRecyclerViewAdapter mAdapter;
 +    private @Nullable TabModel mSpacesObservedModel;
++
++    // The Space a tab about to be created should join. Set when the new tab button is pressed
++    // and consumed in willAddTab, since the tab does not exist yet at the point of the press.
++    private @Nullable Token mPendingSpaceForNewTab;
 +
 +    // Making, renaming or dissolving a Space has to reach the chips. TabModelObserver has no
 +    // callback for any of it — a tab joining a new group need not move — so the chips went
@@ -79,7 +83,7 @@
      private final TabListFaviconProvider mTabListFaviconProvider;
      private final TabListModel mModelList;
      private final TabListMediator mMediator;
-@@ -243,6 +301,11 @@
+@@ -243,6 +305,11 @@
                      @Override
                      public int getItemViewType(int position) {
                          ListItem item = mModelList.get(position);
@@ -91,7 +95,7 @@
                          if (item.type == UiType.TAB) {
                              if (TabProperties.isPinnedTab(item.model)) {
                                  return UiType.PINNED_TAB;
-@@ -299,6 +362,9 @@
+@@ -299,6 +366,9 @@
          mContainerView.setLayoutParams(
                  new ViewGroup.LayoutParams(
                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -101,7 +105,7 @@
  
          @SuppressWarnings("NullAway")
          Supplier<@Nullable TabContentManager> nullableSupplier = tabContentManagerSupplier;
-@@ -616,7 +682,15 @@
+@@ -616,7 +686,15 @@
          mTabModelSelectorTabModelObserver =
                  new TabModelSelectorTabModelObserver(tabModelSelector) {
                      @Override
@@ -117,7 +121,7 @@
                          if (mIsActive) {
                              scrollActiveTabIntoView();
                          }
-@@ -631,6 +705,7 @@
+@@ -631,14 +709,24 @@
                      @Override
                      public void tabClosureCommitted(Tab tab) {
                          mTabHoverCardController.hideHoverCard();
@@ -125,7 +129,15 @@
                      }
  
                      @Override
-@@ -639,6 +714,8 @@
+                     public void willAddTab(Tab tab, @TabLaunchType int type) {
+                         mTabHoverCardController.hideHoverCard();
++                        // A tab made from inside a Space joins it. This runs before the model
++                        // takes the tab, so it is grouped on the way in rather than moved
++                        // afterwards.
++                        if (mPendingSpaceForNewTab != null && tab.getTabGroupId() == null) {
++                            tab.setTabGroupId(mPendingSpaceForNewTab);
++                        }
++                        mPendingSpaceForNewTab = null;
                      }
                  };
  
@@ -134,7 +146,7 @@
          mVerticalTabsActiveSupplier.addSyncObserverAndCallIfNonNull(mActiveObserver);
  
          // Context menus should not appear upon right-clicking the new tab button or the collapse
-@@ -687,6 +764,10 @@
+@@ -687,6 +775,10 @@
          }
  
          mSpineDecoration.destroy();
@@ -145,7 +157,7 @@
          mTabModelSelectorTabModelObserver.destroy();
          mVerticalTabsActiveSupplier.removeObserver(mActiveObserver);
          for (TabSwitcherDragHandler dragHandler : mTabSwitcherDragHandlers) {
-@@ -719,6 +800,12 @@
+@@ -719,6 +811,12 @@
      void setRailCollapseState(@RailCollapseState int railCollapseState) {
          mContainerModel.set(VerticalTabListProperties.COLLAPSE_STATE, railCollapseState);
          updatePinnedLayoutSpanCount();
@@ -158,7 +170,7 @@
          mCollapseController.setRailCollapseStateSupplierValue(railCollapseState);
      }
  
-@@ -802,12 +889,209 @@
+@@ -802,12 +900,210 @@
                  /* tabGroupSyncIds */ null,
                  /* quickMode */ false);
          mPinnedTabsMediator.updateTabModel(tabModel);
@@ -363,8 +375,9 @@
 +    }
 +
      private void handleNewTabButtonClick() {
-+        // A new tab belongs to no Space, so it would open into a rail that is not showing it.
-+        applySpace(null);
++        // A tab made from inside a Space belongs to that Space. The tab does not exist yet, so
++        // the Space is remembered and applied in willAddTab, before the model takes the tab.
++        mPendingSpaceForNewTab = mActiveSpace;
          TabModel model = mTabModelSelector.getCurrentModel();
  
          if (!model.isIncognitoBranded()) model.commitAllTabClosures();
