@@ -9,28 +9,27 @@
 # of one long list. That is a list of groups, not a Space you are in.
 #
 # This puts a row of chips along the bottom of the rail — one per group, plus
-# "All" — and choosing one collapses every other group so that a single Space
-# is open at a time.
+# "All" — and choosing one leaves only that Space's tabs on screen.
 #
-# It is done by collapsing rather than by handing the list a filtered set of
-# tabs, which is what the first version of this patch did and got wrong. Two
-# things downstream assume the list holds every tab in tab-model order:
-# TabListMediator maps a tab-model index onto a list position to follow the
-# selected tab, and StaticPinnedTabsMediator builds the pinned strip by walking
-# that same list. Feeding it a subset moves the selection onto the wrong row
-# and empties the pinned grid of anything outside the chosen Space. Collapsing
-# is the mechanism upstream already uses to hide a group's tabs, and it leaves
-# both of those intact.
+# How the hiding is done matters, because the obvious way is wrong. Shortening
+# the list breaks two things downstream: TabListMediator maps a tab-model index
+# onto a list position to follow the selected tab, and StaticPinnedTabsMediator
+# builds the pinned strip by walking that same list. A shortened list puts the
+# selection on the wrong row and empties the pinned grid.
 #
-# Three things follow, and are deliberate:
+# So rows are kept and rendered as nothing instead. The adapter already does
+# exactly this for pinned tabs — in the main list, UiType.PINNED_TAB is bound
+# to a zero-size hidden layout, with a comment saying it exists to preserve the
+# list's alignment with the tab model. Rows outside the open Space are given
+# that same view type. The list stays whole and aligned; the screen shows one
+# Space.
 #
-#   - Pinned tabs stay visible from every Space, which is what Arc does with
-#     Favorites.
-#   - Making a Space is making a tab group, and renaming or recolouring one is
-#     done where Chromium already does it, in the tab context menu.
-#   - Tabs in no group stay visible from every Space, because only a group can
-#     be collapsed. Arc would hide them; matching that needs the rail to render
-#     a genuine subset, which is a much larger change than this one.
+# Two things follow, and are deliberate:
+#
+#   - Pinned tabs are never hidden. They are Favorites: shown in their own
+#     strip, reachable from every Space, which is what Arc does.
+#   - Making a Space is making a tab group, and renaming or recolouring one
+#     happens where Chromium already does it, in the tab context menu.
 #
 # What this does *not* do is give each Space its own cookies, which is the
 # other half of what Arc means by a Space and by far the larger job — Android's

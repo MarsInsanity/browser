@@ -9,28 +9,42 @@
  
  import androidx.annotation.VisibleForTesting;
  import androidx.recyclerview.widget.GridLayoutManager;
-@@ -113,6 +115,12 @@
+@@ -113,6 +115,13 @@
      private static @Nullable Supplier<TabSwitcherDragHandler>
              sTabSwitcherDragHandlerSupplierForTesting;
      private final VerticalTabRailLayout mContainerView;
 +
-+    // Which Space the rail is showing, or null for all of them. A Space is a tab group;
-+    // this holds nothing beyond which one was last chosen.
++    // Which Space the rail is showing, or null for all of them. A Space is a tab group; this
++    // holds nothing beyond which one was last chosen.
 +    private @Nullable Token mActiveSpace;
 +
 +    private @Nullable LinearLayout mSpacesBar;
++    private @Nullable SimpleRecyclerViewAdapter mAdapter;
      private final TabListFaviconProvider mTabListFaviconProvider;
      private final TabListModel mModelList;
      private final TabListMediator mMediator;
-@@ -299,6 +307,7 @@
+@@ -243,6 +252,11 @@
+                     @Override
+                     public int getItemViewType(int position) {
+                         ListItem item = mModelList.get(position);
++                        if (isOutsideActiveSpace(item)) {
++                            // PINNED_TAB is bound to the zero-size hidden layout in this list,
++                            // so this renders nothing while the row stays in place.
++                            return UiType.PINNED_TAB;
++                        }
+                         if (item.type == UiType.TAB) {
+                             if (TabProperties.isPinnedTab(item.model)) {
+                                 return UiType.PINNED_TAB;
+@@ -299,6 +313,8 @@
          mContainerView.setLayoutParams(
                  new ViewGroup.LayoutParams(
                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
++        mAdapter = adapter;
 +        mSpacesBar = mContainerView.findViewById(R.id.arc_spaces_bar);
  
          @SuppressWarnings("NullAway")
          Supplier<@Nullable TabContentManager> nullableSupplier = tabContentManagerSupplier;
-@@ -616,7 +625,15 @@
+@@ -616,7 +632,15 @@
          mTabModelSelectorTabModelObserver =
                  new TabModelSelectorTabModelObserver(tabModelSelector) {
                      @Override
@@ -46,7 +60,7 @@
                          if (mIsActive) {
                              scrollActiveTabIntoView();
                          }
-@@ -631,6 +648,7 @@
+@@ -631,6 +655,7 @@
                      @Override
                      public void tabClosureCommitted(Tab tab) {
                          mTabHoverCardController.hideHoverCard();
@@ -54,7 +68,7 @@
                      }
  
                      @Override
-@@ -802,11 +820,79 @@
+@@ -802,12 +827,85 @@
                  /* tabGroupSyncIds */ null,
                  /* quickMode */ false);
          mPinnedTabsMediator.updateTabModel(tabModel);
@@ -65,30 +79,33 @@
      }
  
 +    /**
-+     * Shows one Space by collapsing every other tab group, and expands them all again for
-+     * "All". Collapsing is how the rail already hides a group's tabs.
++     * Whether this row belongs to a Space other than the one being shown, and so should render
++     * as nothing.
 +     *
-+     * <p>Deliberately not done by handing the list a filtered set of tabs. Two things
-+     * downstream assume the list holds every tab in tab-model order: TabListMediator maps a
-+     * tab-model index onto a list position to follow the selected tab, and
-+     * StaticPinnedTabsMediator builds the pinned strip by walking this same list. A shortened
-+     * list puts the selection on the wrong row and empties the pinned grid of anything
-+     * outside the chosen Space.
-+     *
-+     * <p>The cost is that tabs in no group stay visible from every Space, since only a group
-+     * can be collapsed.
++     * <p>Pinned tabs are never hidden: they are Favorites, shown in their own strip from every
++     * Space. Tabs in no group are hidden while a Space is open, which is what makes a Space
++     * feel like a place rather than a filter.
 +     */
-+    private void applySpace(@Nullable Token spaceId) {
++    private boolean isOutsideActiveSpace(ListItem item) {
++        if (mActiveSpace == null) return false;
++        if (TabProperties.isPinnedTab(item.model)) return false;
 +        TabModel tabModel = mTabModelSelector.getCurrentModel();
-+        if (tabModel == null) return;
++        if (tabModel == null) return false;
++        int tabId = TabProperties.getTabId(item.model);
++        if (tabId == Tab.INVALID_TAB_ID) return false;
++        Tab tab = tabModel.getTabById(tabId);
++        if (tab == null) return false;
++        return !mActiveSpace.equals(tab.getTabGroupId());
++    }
++
++    /** Shows one Space, or all of them when spaceId is null. */
++    private void applySpace(@Nullable Token spaceId) {
 +        mActiveSpace = spaceId;
-+        for (Token tabGroupId : tabModel.getAllTabGroupIds()) {
-+            boolean shouldCollapse = spaceId != null && !tabGroupId.equals(spaceId);
-+            if (tabModel.getTabGroupCollapsed(tabGroupId) != shouldCollapse) {
-+                tabModel.setTabGroupCollapsed(tabGroupId, shouldCollapse, /* animate= */ true);
-+            }
++        if (mAdapter != null) {
++            // View types are what decide which rows render, so they have to be re-evaluated.
++            mAdapter.notifyDataSetChanged();
 +        }
-+        rebuildSpacesBar(tabModel);
++        refreshSpacesBar();
 +    }
 +
 +    private void refreshSpacesBar() {
@@ -132,8 +149,11 @@
 +    }
 +
      private void handleNewTabButtonClick() {
++        // A new tab belongs to no Space, so it would open into a rail that is not showing it.
++        applySpace(null);
          TabModel model = mTabModelSelector.getCurrentModel();
  
+         if (!model.isIncognitoBranded()) model.commitAllTabClosures();
 --- a/chrome/android/features/tab_ui/java/res/layout/vertical_tab_layout.xml
 +++ b/chrome/android/features/tab_ui/java/res/layout/vertical_tab_layout.xml
 @@ -107,7 +107,7 @@

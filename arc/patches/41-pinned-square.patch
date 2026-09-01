@@ -21,8 +21,8 @@
 +                                                    /* attachToRoot= */ false);
 +                    // The grid hands the tile its width, which follows the rail and so the
 +                    // window. Track that width with the height rather than fixing the height
-+                    // in dp, which letterboxes the tile one way or the other at every size
-+                    // except the one the number was chosen for.
++                    // in dp, which letterboxes the tile at every width except the one the
++                    // number was chosen for.
 +                    tile.addOnLayoutChangeListener(
 +                            (v, left, top, right, bottom, oldL, oldT, oldR, oldB) -> {
 +                                int width = right - left;
@@ -37,3 +37,17 @@
                  TabVerticalViewBinder::bindPinnedTab);
  
          pinnedTabsRecyclerView.setAdapter(pinnedTabsAdapter);
+--- a/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/TabVerticalViewBinder.java
++++ b/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/TabVerticalViewBinder.java
+@@ -154,7 +154,10 @@
+             updateTabItemSize(
+                     model,
+                     view,
+-                    resources.getDimensionPixelSize(R.dimen.vertical_tab_pinned_item_width),
++                    // Fill the grid cell instead of sitting at a fixed width inside it. This is
++                    // what the layout asks for; the height then follows the measured width, in
++                    // VerticalTabListCoordinator. The collapsed rail still uses its own square.
++                    ViewGroup.LayoutParams.MATCH_PARENT,
+                     resources.getDimensionPixelSize(R.dimen.vertical_tab_pinned_item_height));
+             updateChildRowPadding(model, view);
+         } else if (TabProperties.IS_GLIC_ACTIVE == propertyKey) {
