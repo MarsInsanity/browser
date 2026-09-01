@@ -40,6 +40,25 @@
                  TabVerticalViewBinder::bindPinnedTab);
  
          pinnedTabsRecyclerView.setAdapter(pinnedTabsAdapter);
+@@ -545,6 +564,18 @@
+         pinnedTabsRecyclerView.setupCustomItemAnimator(/* useClipAnimations= */ true);
+         mPinnedLayoutManager = new GridLayoutManager(activity, getSpanCount());
+         pinnedTabsRecyclerView.setLayoutManager(mPinnedLayoutManager);
++        int pinnedGutter = Math.round(activity.getResources().getDisplayMetrics().density * 5);
++        pinnedTabsRecyclerView.addItemDecoration(
++                new RecyclerView.ItemDecoration() {
++                    @Override
++                    public void getItemOffsets(
++                            Rect outRect,
++                            View view,
++                            RecyclerView parent,
++                            RecyclerView.State state) {
++                        outRect.set(pinnedGutter, pinnedGutter, pinnedGutter, pinnedGutter);
++                    }
++                });
+ 
+         // Create a gesture detector to catch long-presses on the pinned tabs rv empty background
+         // area.
 --- a/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/TabVerticalViewBinder.java
 +++ b/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/TabVerticalViewBinder.java
 @@ -154,7 +154,10 @@

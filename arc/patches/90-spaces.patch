@@ -97,7 +97,7 @@
          mCollapseController.setRailCollapseStateSupplierValue(railCollapseState);
      }
  
-@@ -802,12 +842,171 @@
+@@ -802,12 +842,202 @@
                  /* tabGroupSyncIds */ null,
                  /* quickMode */ false);
          mPinnedTabsMediator.updateTabModel(tabModel);
@@ -159,7 +159,38 @@
 +        if (current < 0) current = 0;
 +        int next = current + delta;
 +        if (next < 0 || next >= spaces.size()) return;
-+        applySpace(spaces.get(next));
++        slideToSpace(spaces.get(next), delta);
++    }
++
++    /**
++     * Changes Space with the list sliding out the way it was pushed and the new one coming in
++     * from the other side, so a swipe reads as moving between places rather than as the
++     * contents of one list being rewritten.
++     */
++    private void slideToSpace(@Nullable Token spaceId, int direction) {
++        int width = mRecyclerView.getWidth();
++        if (width <= 0) {
++            applySpace(spaceId);
++            return;
++        }
++        float travel = width * 0.35f * (direction > 0 ? -1f : 1f);
++        mRecyclerView
++                .animate()
++                .translationX(travel)
++                .alpha(0f)
++                .setDuration(110)
++                .withEndAction(
++                        () -> {
++                            applySpace(spaceId);
++                            mRecyclerView.setTranslationX(-travel);
++                            mRecyclerView
++                                    .animate()
++                                    .translationX(0f)
++                                    .alpha(1f)
++                                    .setDuration(160)
++                                    .start();
++                        })
++                .start();
 +    }
 +
 +    private void refreshSpacesBar() {
@@ -280,7 +311,7 @@
          app:layout_constraintVertical_bias="0.0"
          android:src="@drawable/ic_add_24dp"
          android:background="@drawable/vertical_tabs_new_tab_button_background"
-@@ -115,4 +115,25 @@
+@@ -115,4 +115,27 @@
          android:layout_marginTop="@dimen/vertical_tabs_new_tab_button_margin_top"
          android:layout_marginBottom="@dimen/vertical_tabs_new_tab_button_margin_bottom"/>
  
@@ -292,6 +323,8 @@
 +        android:layout_height="wrap_content"
 +        android:scrollbars="none"
 +        android:fillViewport="true"
++        android:paddingTop="4dp"
++        android:paddingBottom="14dp"
 +        app:layout_constraintStart_toStartOf="parent"
 +        app:layout_constraintEnd_toEndOf="parent"
 +        app:layout_constraintTop_toBottomOf="@id/new_tab_button"

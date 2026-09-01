@@ -38,13 +38,11 @@ arc_patch "pinned tiles fill their grid cell" \
     's|android:layout_width="@dimen/vertical_tab_pinned_item_width"|android:layout_width="match_parent"|' \
     'android:layout_width="match_parent"'
 
-# The tile only had a bottom margin, so filling the cell would butt neighbours
-# against each other. The same margin on every side gives the grid its gutters.
-arc_patch "pinned tiles have gutters on every side" \
-    "$PINNED_ITEM" \
-    'android:layout_marginBottom="@dimen/vertical_tab_item_margin_bottom"' \
-    's|android:layout_marginBottom="@dimen/vertical_tab_item_margin_bottom"|android:layout_margin="10dp"|' \
-    'android:layout_margin="10dp"'
+# Spacing between tiles is an ItemDecoration rather than a margin on the tile.
+# A margin here does not survive: the binder rewrites the tile's LayoutParams
+# on every bind, and the grid measures cells before the tile is bound at all.
+# A decoration is applied by the RecyclerView itself and cannot be overwritten
+# downstream. It lives in 41-pinned-square.patch, beside the layout listener.
 
 # Three columns rather than up to four.
 arc_patch "pinned tabs use a three-column grid" \
