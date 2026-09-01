@@ -1,0 +1,41 @@
+--- a/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/PinnedTabClosureManager.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/PinnedTabClosureManager.java
+@@ -143,7 +143,7 @@
+      * tab restored at startup is pinned straight from its saved state without ever
+      * passing through the code that records one.
+      */
+-    private @Nullable GURL getPinnedHome(Tab tab) {
++    public @Nullable GURL getPinnedHome(Tab tab) {
+         GURL home = mPinnedHomeUrls.get(tab.getId());
+         if (home != null) return home;
+ 
+--- a/chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java
+@@ -157,6 +157,7 @@
+ import org.chromium.chrome.browser.tab_ui.TabModelDotInfo;
+ import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
+ import org.chromium.chrome.browser.tabmodel.OverridableTabCount;
++import org.chromium.chrome.browser.tabmodel.PinnedTabClosureManager;
+ import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
+ import org.chromium.chrome.browser.tabmodel.TabCreatorUtil;
+ import org.chromium.chrome.browser.tabmodel.TabModel;
+@@ -970,6 +971,19 @@
+                         mTabCreatorManager,
+                         mLocationBarModel::isOffTheRecord,
+                         () -> {
++                            // A pinned tab has a home of its own: the page it was pinned at.
++                            // Sending it there is what Home means for a pinned tab, and gives
++                            // that behaviour a touch target rather than leaving it on Ctrl+W.
++                            Tab homeTab = mLocationBarModel.getTab();
++                            if (homeTab != null && homeTab.getIsPinned()) {
++                                GURL pinnedHome =
++                                        PinnedTabClosureManager.getInstance()
++                                                .getPinnedHome(homeTab);
++                                if (pinnedHome != null && !pinnedHome.isEmpty()) {
++                                    homeTab.loadUrl(new LoadUrlParams(pinnedHome));
++                                    return;
++                                }
++                            }
+                             HomepageManager.getInstance()
+                                     .openHomepage(
+                                             mLocationBarModel.getTab(),

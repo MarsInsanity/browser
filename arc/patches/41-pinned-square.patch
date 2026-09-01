@@ -40,7 +40,7 @@
                  TabVerticalViewBinder::bindPinnedTab);
  
          pinnedTabsRecyclerView.setAdapter(pinnedTabsAdapter);
-@@ -545,6 +564,18 @@
+@@ -545,6 +564,26 @@
          pinnedTabsRecyclerView.setupCustomItemAnimator(/* useClipAnimations= */ true);
          mPinnedLayoutManager = new GridLayoutManager(activity, getSpanCount());
          pinnedTabsRecyclerView.setLayoutManager(mPinnedLayoutManager);
@@ -53,6 +53,14 @@
 +                            View view,
 +                            RecyclerView parent,
 +                            RecyclerView.State state) {
++                        // Only when the rail is open. A collapsed rail is a single column of
++                        // 32dp icons that has to line up with the buttons above and the tabs
++                        // below it, and a gutter here pushes the tiles out of that column.
++                        if (mContainerModel.get(VerticalTabListProperties.COLLAPSE_STATE)
++                                == RailCollapseState.COLLAPSED) {
++                            outRect.setEmpty();
++                            return;
++                        }
 +                        outRect.set(pinnedGutter, pinnedGutter, pinnedGutter, pinnedGutter);
 +                    }
 +                });
