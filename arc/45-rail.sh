@@ -29,6 +29,20 @@ arc_patch "tab rows are thicker" \
     's|<dimen name="vertical_tab_item_padding_vertical">6dp</dimen>|<dimen name="vertical_tab_item_padding_vertical">10dp</dimen>|' \
     '<dimen name="vertical_tab_item_padding_vertical">10dp</dimen>'
 
+# The pinned grid and the tab list are separate RecyclerViews, and only the tab
+# list carries the scrollbar's geometry: a -9dp end margin and a matching 9dp
+# end padding, which shift its content box 9dp to the right of the pinned
+# grid's. Upstream centres a collapsed item in either list with one margin
+# computed from the rail's own width, so that 9dp difference leaves the two
+# lists centred about 4.5dp apart — the pinned tiles sitting right of the tabs
+# under them. Giving the pinned grid the same geometry lines the two up, in the
+# collapsed rail and in the expanded one.
+arc_patch "pinned grid shares the tab list's geometry" \
+    "$LAYOUT" \
+    'android:id="@\+id/pinned_tabs_recycler_view"' \
+    '\|android:id="@+id/pinned_tabs_recycler_view"|,+5 s|android:overScrollMode="never" />|android:layout_marginEnd="@dimen/vertical_tabs_scrollbar_margin_end"\n        android:paddingEnd="@dimen/vertical_tabs_scrollbar_padding_end"\n        android:clipToPadding="false"\n        android:overScrollMode="never" />|' \
+    'android:paddingEnd="@dimen/vertical_tabs_scrollbar_padding_end"'
+
 # The tab list takes the space between the pinned grid and the controls rather
 # than only as much as its contents need, which leaves the new tab button and
 # the Spaces row sitting at the bottom of the rail instead of following the

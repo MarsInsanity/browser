@@ -40,7 +40,7 @@
                  TabVerticalViewBinder::bindPinnedTab);
  
          pinnedTabsRecyclerView.setAdapter(pinnedTabsAdapter);
-@@ -545,6 +564,26 @@
+@@ -545,6 +564,29 @@
          pinnedTabsRecyclerView.setupCustomItemAnimator(/* useClipAnimations= */ true);
          mPinnedLayoutManager = new GridLayoutManager(activity, getSpanCount());
          pinnedTabsRecyclerView.setLayoutManager(mPinnedLayoutManager);
@@ -53,11 +53,14 @@
 +                            View view,
 +                            RecyclerView parent,
 +                            RecyclerView.State state) {
-+                        // Only when the rail is open. A collapsed rail is a single column of
-+                        // 32dp icons that has to line up with the buttons above and the tabs
-+                        // below it, and a gutter here pushes the tiles out of that column.
-+                        if (mContainerModel.get(VerticalTabListProperties.COLLAPSE_STATE)
-+                                == RailCollapseState.COLLAPSED) {
++                        // Only when the grid has more than one column. A collapsed rail is a
++                        // single column of 32dp icons centred by a margin the binder sets, and
++                        // any offset here lands on top of that margin and pushes the tiles out
++                        // of the column the tabs below them sit in. Reading the span count
++                        // rather than the collapse-state property keeps this in step with the
++                        // layout: the layout manager is what measures the cells.
++                        if (mPinnedLayoutManager == null
++                                || mPinnedLayoutManager.getSpanCount() <= 1) {
 +                            outRect.setEmpty();
 +                            return;
 +                        }
