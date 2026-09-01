@@ -43,8 +43,8 @@ arc_patch "pinned tiles fill their grid cell" \
 arc_patch "pinned tiles have gutters on every side" \
     "$PINNED_ITEM" \
     'android:layout_marginBottom="@dimen/vertical_tab_item_margin_bottom"' \
-    's|android:layout_marginBottom="@dimen/vertical_tab_item_margin_bottom"|android:layout_margin="6dp"|' \
-    'android:layout_margin="6dp"'
+    's|android:layout_marginBottom="@dimen/vertical_tab_item_margin_bottom"|android:layout_margin="10dp"|' \
+    'android:layout_margin="10dp"'
 
 # Three columns rather than up to four.
 arc_patch "pinned tabs use a three-column grid" \
