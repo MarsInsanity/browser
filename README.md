@@ -140,15 +140,18 @@ re-anchor a patch that has broken.
 
 ## Building
 
-`build.sh` compiles on current Ubuntu and probably other Linux distributions,
-including Ubuntu under WSL2 (build inside the Linux filesystem, not under
-`/mnt`). It installs its dependencies, clones Chromium at the targeted version,
-applies all four layers, and builds and signs `armeabi-v7a` and `arm64-v8a`.
-A local build that only needs one device can build a single architecture:
+`build.sh` compiles on current Ubuntu and probably other Linux distributions.
+It installs its dependencies, clones Chromium at the targeted version, applies
+all four layers, and builds and signs `armeabi-v7a` and `arm64-v8a`. A local
+build that only needs one device can build a single architecture:
 
 ```shell
 ARCHS=arm64 ./build.sh
 ```
+
+[docs/BUILDING.md](docs/BUILDING.md) covers hardware, building under WSL2, and
+building on a NAS or second machine, along with the failures worth knowing
+about in advance.
 
 To build releases in CI, fork this repository and add your `base64`-encoded
 `keystore.jks` and `local.properties` (holding `keyAlias`, `keyPassword` and
