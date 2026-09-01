@@ -8,19 +8,29 @@
 # moved between windows — but the rail shows every group at once, as sections
 # of one long list. That is a list of groups, not a Space you are in.
 #
-# This narrows the rail to one group at a time and puts a row of chips at the
-# bottom to choose between them, plus "All" for the unfiltered view. It is a
-# lens over tab groups, and owns no state beyond which one is being looked
-# through, so nothing here can lose a tab.
+# This puts a row of chips along the bottom of the rail — one per group, plus
+# "All" — and choosing one collapses every other group so that a single Space
+# is open at a time.
 #
-# Three things follow from that, and are deliberate:
+# It is done by collapsing rather than by handing the list a filtered set of
+# tabs, which is what the first version of this patch did and got wrong. Two
+# things downstream assume the list holds every tab in tab-model order:
+# TabListMediator maps a tab-model index onto a list position to follow the
+# selected tab, and StaticPinnedTabsMediator builds the pinned strip by walking
+# that same list. Feeding it a subset moves the selection onto the wrong row
+# and empties the pinned grid of anything outside the chosen Space. Collapsing
+# is the mechanism upstream already uses to hide a group's tabs, and it leaves
+# both of those intact.
 #
-#   - Pinned tabs are not filtered. They come from a separate mediator and stay
-#     visible from every Space, which is what Arc does with Favorites.
+# Three things follow, and are deliberate:
+#
+#   - Pinned tabs stay visible from every Space, which is what Arc does with
+#     Favorites.
 #   - Making a Space is making a tab group, and renaming or recolouring one is
 #     done where Chromium already does it, in the tab context menu.
-#   - Opening a new tab widens back to "All", because a new tab belongs to no
-#     group and would otherwise open into a rail that is not showing it.
+#   - Tabs in no group stay visible from every Space, because only a group can
+#     be collapsed. Arc would hide them; matching that needs the rail to render
+#     a genuine subset, which is a much larger change than this one.
 #
 # What this does *not* do is give each Space its own cookies, which is the
 # other half of what Arc means by a Space and by far the larger job — Android's

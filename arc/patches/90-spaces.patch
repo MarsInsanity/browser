@@ -14,8 +14,8 @@
              sTabSwitcherDragHandlerSupplierForTesting;
      private final VerticalTabRailLayout mContainerView;
 +
-+    // The Space the rail is narrowed to, or null for all tabs. A Space is a tab group;
-+    // this only decides which of them the rail is showing, and owns no state of its own.
++    // Which Space the rail is showing, or null for all of them. A Space is a tab group;
++    // this holds nothing beyond which one was last chosen.
 +    private @Nullable Token mActiveSpace;
 +
 +    private @Nullable LinearLayout mSpacesBar;
@@ -30,12 +30,31 @@
  
          @SuppressWarnings("NullAway")
          Supplier<@Nullable TabContentManager> nullableSupplier = tabContentManagerSupplier;
-@@ -798,16 +807,68 @@
-         if (tabModel == null) return;
+@@ -616,7 +625,15 @@
+         mTabModelSelectorTabModelObserver =
+                 new TabModelSelectorTabModelObserver(tabModelSelector) {
+                     @Override
++                    public void didMoveTab(Tab tab, int newIndex, int curIndex) {
++                        // Making or dissolving a Space moves tabs. There is no group-level
++                        // callback here, so this is where a changed set of Spaces surfaces.
++                        refreshSpacesBar();
++                    }
++
++                    @Override
+                     public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
++                        refreshSpacesBar();
+                         if (mIsActive) {
+                             scrollActiveTabIntoView();
+                         }
+@@ -631,6 +648,7 @@
+                     @Override
+                     public void tabClosureCommitted(Tab tab) {
+                         mTabHoverCardController.hideHoverCard();
++                        refreshSpacesBar();
+                     }
  
-         mMediator.resetWithListOfTabs(
--                tabModel.getRepresentativeTabList(),
-+                getTabsForActiveSpace(tabModel),
+                     @Override
+@@ -802,11 +820,79 @@
                  /* tabGroupSyncIds */ null,
                  /* quickMode */ false);
          mPinnedTabsMediator.updateTabModel(tabModel);
@@ -46,25 +65,44 @@
      }
  
 +    /**
-+     * The tabs the rail should show: everything when no Space is chosen, and otherwise only
-+     * the tabs of the chosen one. Pinned tabs are not filtered — they are shown by their own
-+     * mediator and stay visible from every Space, which is what Arc does with Favorites.
++     * Shows one Space by collapsing every other tab group, and expands them all again for
++     * "All". Collapsing is how the rail already hides a group's tabs.
++     *
++     * <p>Deliberately not done by handing the list a filtered set of tabs. Two things
++     * downstream assume the list holds every tab in tab-model order: TabListMediator maps a
++     * tab-model index onto a list position to follow the selected tab, and
++     * StaticPinnedTabsMediator builds the pinned strip by walking this same list. A shortened
++     * list puts the selection on the wrong row and empties the pinned grid of anything
++     * outside the chosen Space.
++     *
++     * <p>The cost is that tabs in no group stay visible from every Space, since only a group
++     * can be collapsed.
 +     */
-+    private List<Tab> getTabsForActiveSpace(TabModel tabModel) {
-+        if (mActiveSpace == null) return tabModel.getRepresentativeTabList();
-+        if (!tabModel.getAllTabGroupIds().contains(mActiveSpace)) {
-+            // The Space was dissolved, or its last tab closed. Fall back to showing everything
-+            // rather than an empty rail with no way out of it.
-+            mActiveSpace = null;
-+            return tabModel.getRepresentativeTabList();
++    private void applySpace(@Nullable Token spaceId) {
++        TabModel tabModel = mTabModelSelector.getCurrentModel();
++        if (tabModel == null) return;
++        mActiveSpace = spaceId;
++        for (Token tabGroupId : tabModel.getAllTabGroupIds()) {
++            boolean shouldCollapse = spaceId != null && !tabGroupId.equals(spaceId);
++            if (tabModel.getTabGroupCollapsed(tabGroupId) != shouldCollapse) {
++                tabModel.setTabGroupCollapsed(tabGroupId, shouldCollapse, /* animate= */ true);
++            }
 +        }
-+        return tabModel.getTabsInGroup(mActiveSpace);
++        rebuildSpacesBar(tabModel);
 +    }
 +
-+    /** Rebuilds the row of Space chips. Cheap, and the set of tab groups can change anywhere. */
++    private void refreshSpacesBar() {
++        TabModel tabModel = mTabModelSelector.getCurrentModel();
++        if (tabModel != null) rebuildSpacesBar(tabModel);
++    }
++
++    /** Rebuilds the row of Space chips. Cheap, and the set of groups changes from anywhere. */
 +    private void rebuildSpacesBar(TabModel tabModel) {
 +        if (mSpacesBar == null) return;
 +        mSpacesBar.removeAllViews();
++        if (mActiveSpace != null && !tabModel.getAllTabGroupIds().contains(mActiveSpace)) {
++            mActiveSpace = null;
++        }
 +        mSpacesBar.addView(createSpaceChip(null, "All"));
 +        int n = 1;
 +        for (Token tabGroupId : tabModel.getAllTabGroupIds()) {
@@ -79,27 +117,23 @@
 +        TextView chip = new TextView(mContainerView.getContext());
 +        chip.setText(label);
 +        chip.setSingleLine(true);
-+        int pad = Math.round(mContainerView.getResources().getDisplayMetrics().density * 8);
-+        chip.setPadding(pad, pad / 2, pad, pad / 2);
++        float density = mContainerView.getResources().getDisplayMetrics().density;
++        int padH = Math.round(density * 10);
++        int padV = Math.round(density * 6);
++        chip.setPadding(padH, padV, padH, padV);
++        // Take the text appearance the tab titles beside it use; the bare theme default can
++        // come out dark on the rail's own dark background.
++        chip.setTextAppearance(R.style.TextAppearance_TextMedium_Primary);
 +        boolean isActive =
 +                tabGroupId == null ? mActiveSpace == null : tabGroupId.equals(mActiveSpace);
-+        chip.setAlpha(isActive ? 1.0f : 0.55f);
-+        chip.setOnClickListener(
-+                v -> {
-+                    mActiveSpace = tabGroupId;
-+                    resetWithListOfTabs(mTabModelSelector.getCurrentModel());
-+                });
++        chip.setAlpha(isActive ? 1.0f : 0.5f);
++        chip.setOnClickListener(v -> applySpace(tabGroupId));
 +        return chip;
 +    }
 +
      private void handleNewTabButtonClick() {
-+        // A new tab belongs to no Space yet, so opening one while the rail is narrowed to a
-+        // Space would put it somewhere the rail is not showing. Widen back to everything
-+        // instead of opening a tab that appears nowhere.
-+        mActiveSpace = null;
          TabModel model = mTabModelSelector.getCurrentModel();
  
-         if (!model.isIncognitoBranded()) model.commitAllTabClosures();
 --- a/chrome/android/features/tab_ui/java/res/layout/vertical_tab_layout.xml
 +++ b/chrome/android/features/tab_ui/java/res/layout/vertical_tab_layout.xml
 @@ -107,7 +107,7 @@

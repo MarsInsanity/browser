@@ -38,13 +38,6 @@ arc_patch "pinned tiles fill their grid cell" \
     's|android:layout_width="@dimen/vertical_tab_pinned_item_width"|android:layout_width="match_parent"|' \
     'android:layout_width="match_parent"'
 
-# A tile that is ~64dp wide and 32dp tall is a letterbox. Square it up.
-arc_patch "pinned tiles are square rather than letterboxed" \
-    "$DIMENS" \
-    '<dimen name="vertical_tab_pinned_item_height">32dp</dimen>' \
-    's|<dimen name="vertical_tab_pinned_item_height">32dp</dimen>|<dimen name="vertical_tab_pinned_item_height">64dp</dimen>|' \
-    '<dimen name="vertical_tab_pinned_item_height">64dp</dimen>'
-
 # The tile only had a bottom margin, so filling the cell would butt neighbours
 # against each other. The same margin on every side gives the grid its gutters.
 arc_patch "pinned tiles have gutters on every side" \
@@ -70,3 +63,9 @@ arc_patch "pinned grid does not reflow with rail width" \
     '^ +return Math\.min\(DEFAULT_GRID_SPAN_COUNT, calculatedSpans\);$' \
     's|return Math.min(DEFAULT_GRID_SPAN_COUNT, calculatedSpans);|return DEFAULT_GRID_SPAN_COUNT;|' \
     '^ +return DEFAULT_GRID_SPAN_COUNT;$'
+
+# A tile whose width comes from the grid and whose height is a number in dimens
+# is letterboxed at every rail width except the one that number was picked for.
+# Track the width with the height instead, so it is square at any of them.
+arc_apply_patch "pinned tiles stay square at any rail width" \
+    "$ARC_ROOT/arc/patches/41-pinned-square.patch"

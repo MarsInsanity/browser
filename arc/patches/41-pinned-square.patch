@@ -1,0 +1,39 @@
+--- a/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalTabListCoordinator.java
++++ b/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalTabListCoordinator.java
+@@ -531,13 +531,29 @@
+ 
+         pinnedTabsAdapter.registerType(
+                 UiType.PINNED_TAB,
+-                parent ->
+-                        (ViewGroup)
+-                                LayoutInflater.from(activity)
+-                                        .inflate(
+-                                                R.layout.vertical_tab_pinned_item,
+-                                                parent,
+-                                                /* attachToRoot= */ false),
++                parent -> {
++                    ViewGroup tile =
++                            (ViewGroup)
++                                    LayoutInflater.from(activity)
++                                            .inflate(
++                                                    R.layout.vertical_tab_pinned_item,
++                                                    parent,
++                                                    /* attachToRoot= */ false);
++                    // The grid hands the tile its width, which follows the rail and so the
++                    // window. Track that width with the height rather than fixing the height
++                    // in dp, which letterboxes the tile one way or the other at every size
++                    // except the one the number was chosen for.
++                    tile.addOnLayoutChangeListener(
++                            (v, left, top, right, bottom, oldL, oldT, oldR, oldB) -> {
++                                int width = right - left;
++                                ViewGroup.LayoutParams params = v.getLayoutParams();
++                                if (width > 0 && params != null && params.height != width) {
++                                    params.height = width;
++                                    v.requestLayout();
++                                }
++                            });
++                    return tile;
++                },
+                 TabVerticalViewBinder::bindPinnedTab);
+ 
+         pinnedTabsRecyclerView.setAdapter(pinnedTabsAdapter);
