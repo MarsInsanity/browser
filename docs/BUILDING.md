@@ -82,6 +82,26 @@ most models, and custom DSM installs have no such restriction at all.
 
 Whatever it lands on, that filesystem needs ~150GB free.
 
+Prefer **ext4** over Btrfs for this volume. Copy-on-write is a poor match for a
+build that rewrites hundreds of thousands of object files, and the features
+paid for by that overhead — snapshots, checksums — protect data that is
+reproducible from source anyway. On Btrfs, at least exclude the build directory
+from CoW with `chattr +C` while it is still empty; new files inherit the flag,
+existing ones do not.
+
+Then turn off, on the shared folder the build lives in:
+
+- **Recycle Bin.** The build deletes and rewrites constantly, and every one of
+  those goes to `#recycle` instead of freeing space. This is the one that
+  silently doubles the volume.
+- **Scheduled snapshots**, on Btrfs. They pin every version of every
+  intermediate file the build churns through.
+- **Indexing and antivirus.** Cataloguing or scanning a few million object
+  files buys nothing and sits in the write path.
+
+Keep it out of anything Cloud Sync or Synology Drive watches, for the same
+reason.
+
 ### The container
 
 In **Container Manager → Project**, create a project and paste this, adjusting
