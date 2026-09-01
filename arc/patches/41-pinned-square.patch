@@ -1,17 +1,6 @@
 --- a/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalTabListCoordinator.java
 +++ b/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalTabListCoordinator.java
-@@ -109,6 +109,10 @@
- @NullMarked
- public class VerticalTabListCoordinator {
-     static final int DEFAULT_GRID_SPAN_COUNT = 4;
-+
-+    // A pinned tile is this much taller than it is wide. Landscape rather than square, which
-+    // reads as a button rather than as a thumbnail.
-+    private static final float PINNED_TILE_ASPECT = 0.66f;
-     static final int COLLAPSED_GRID_SPAN_COUNT = 1;
-     private static @Nullable Supplier<TabSwitcherDragHandler>
-             sTabSwitcherDragHandlerSupplierForTesting;
-@@ -531,13 +535,30 @@
+@@ -531,13 +531,32 @@
  
          pinnedTabsAdapter.registerType(
                  UiType.PINNED_TAB,
@@ -37,7 +26,9 @@
 +                            (v, left, top, right, bottom, oldL, oldT, oldR, oldB) -> {
 +                                int width = right - left;
 +                                if (width <= 0) return;
-+                                int height = Math.round(width * PINNED_TILE_ASPECT);
++                                // Landscape rather than square: two thirds of the width the
++                                // grid gives it, which reads as a button not a thumbnail.
++                                int height = Math.round(width * 0.66f);
 +                                ViewGroup.LayoutParams params = v.getLayoutParams();
 +                                if (params != null && params.height != height) {
 +                                    params.height = height;
