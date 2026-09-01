@@ -46,9 +46,11 @@ Two things are nonetheless available:
 **Recommended shape.** Two stages, because the visible part of Spaces is much
 cheaper than the isolation part and is worth having on its own.
 
-1. *Spaces as an organising concept*, backed by tab groups — naming, colour,
-   switching, and the rail showing one space at a time. Mostly new files.
-   No cookie isolation.
+1. ~~*Spaces as an organising concept*, backed by tab groups — naming, colour,
+   switching, and the rail showing one space at a time.~~ **Done**, in
+   `arc/90-spaces.sh`. It came out smaller than this estimate: the rail's
+   contents are set from an explicit list of tabs at a single call site, so
+   narrowing it to one group is a filter there rather than new plumbing.
 2. *Isolation*, by giving each space its own persistent profile: a JNI bridge
    over the native APIs above, then teaching the tab model and tab persistence
    to carry a profile per space.
@@ -62,7 +64,24 @@ Do not use route (a), OTR-backed spaces, as a shortcut for stage 2: cookies
 that vanish on restart do not meet the requirement, and the plumbing thrown
 away afterwards is most of the same plumbing.
 
-## Pinned tabs that return to where they were pinned
+## Done since this was written
+
+- **Pinned tabs return to where they were pinned** — `arc/50-pinned-home.sh`,
+  with the URL written through to disk and a fallback to the first entry in the
+  tab's own history, which is what covers a tab reopened under a new ID.
+- **Setting a pinned tab's home from the context menu** —
+  `arc/80-pinned-home-menu.sh`.
+- **The pinned grid** — `arc/40-pinned.sh`, three columns, tiles filling their
+  cells.
+- **Spaces, the organising half** — `arc/90-spaces.sh`. The rail shows one tab
+  group at a time with a switcher along the bottom. Cookie isolation is still
+  the open half; see below.
+- **Auto picture-in-picture** — `arc/70-media.sh`, which is Arc's Mini Player
+  under another name.
+
+The sections below are what remains.
+
+## Pinned tabs that return to where they were pinned — done
 
 **Wanted:** closing a pinned tab (Ctrl+W, or a home button) returns it to the
 URL it held when it was pinned, rather than closing it.
