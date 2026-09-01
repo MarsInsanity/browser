@@ -49,12 +49,21 @@ it is `chrome://flags#android-vertical-tabs` upstream. Six patches:
   it leaves — the half of the sidebar that exists only for a mouse or trackpad.
 - Turn on `external_drag`, so a tab can be dragged out of the rail into another
   window.
-- Widen eligibility. Upstream requires the device to report a tablet form
-  factor, which excludes a phone in desktop mode, an opened foldable and a
-  freeform window on an external display. The patch gates on the window being
-  at least `MIN_EXPAND_WINDOW_WIDTH_DP` (652dp) wide instead — the constant
-  upstream already uses to decide whether the rail may expand — so the sidebar
-  follows the window rather than the device.
+- Gate eligibility on width, not form factor. Upstream requires the device to
+  report a tablet, so the sidebar follows the device. The patch gates on the
+  window being at least `MIN_EXPAND_WINDOW_WIDTH_DP` (652dp) wide instead — the
+  constant upstream already uses to decide whether the rail may expand — so it
+  follows the window.
+
+  This matters in both directions. A phone in desktop mode, an opened foldable
+  and a freeform window on an external display are all wide enough for the rail
+  but fail a form-factor check. And a tablet in a window *narrower* than the
+  rail needs passes that check when it should not: vertical tabs being on
+  suppresses the horizontal tab strip, but a rail with no room does not draw
+  either, so the window keeps the strip's reserved height at the top of the
+  window and fills it with nothing — a dead band above the toolbar. Width alone
+  means a narrow window falls back to the horizontal strip, which fits there,
+  and that band is occupied either way.
 
 ### `arc/20-tablet.sh` — large screens, windows and pointers
 

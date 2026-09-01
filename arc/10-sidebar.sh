@@ -58,13 +58,21 @@ arc_patch "tabs drag between windows" \
     's|ChromeFeatureList.ANDROID_VERTICAL_TABS, EXTERNAL_DRAG_PARAM, false);|ChromeFeatureList.ANDROID_VERTICAL_TABS, EXTERNAL_DRAG_PARAM, true);|' \
     'ChromeFeatureList\.ANDROID_VERTICAL_TABS, EXTERNAL_DRAG_PARAM, true\);'
 
-# Upstream gates the sidebar on the device reporting a tablet form factor. A
-# phone in desktop mode, a foldable opened out, or a freeform window on a
-# desktop-class display are all wide enough for the rail but fail that check.
-# Gate on the width the rail actually needs instead, which is the constant
-# upstream already uses to decide whether the rail may expand at all.
-arc_patch "sidebar available in any window wide enough for it" \
+# Upstream gates the sidebar on the device reporting a tablet form factor.
+# Gate it on the width the rail actually needs instead — the constant upstream
+# already uses to decide whether the rail may expand at all.
+#
+# This runs both ways, and both matter. A phone in desktop mode, a foldable
+# opened out and a freeform window on an external display are all wide enough
+# for the rail but fail a form-factor check. More importantly, a tablet in a
+# window *narrower* than the rail needs passes that check and should not:
+# vertical tabs being on suppresses the horizontal tab strip, but a rail with
+# no room does not draw either, so the window keeps the strip's reserved height
+# at the top and fills it with nothing. Making eligibility a question of width
+# alone means a narrow window falls back to the horizontal strip, which is what
+# fits there, and the band at the top is occupied either way.
+arc_patch "sidebar follows the window's width, not the device's form factor" \
     "$VT_UTILS" \
     '&& DeviceFormFactor\.isNonMultiDisplayContextOnTablet\(context\);' \
-    's|&& DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);|\&\& (DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)\n                        \|\| context.getResources().getConfiguration().screenWidthDp\n                                >= MIN_EXPAND_WINDOW_WIDTH_DP);|' \
-    '>= MIN_EXPAND_WINDOW_WIDTH_DP\);'
+    's|&& DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);|\&\& context.getResources().getConfiguration().screenWidthDp\n                        >= MIN_EXPAND_WINDOW_WIDTH_DP;|' \
+    '>= MIN_EXPAND_WINDOW_WIDTH_DP;'
