@@ -1,0 +1,19 @@
+--- a/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/ChromeTabCreator.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/ChromeTabCreator.java
+@@ -478,6 +478,16 @@
+             if (creationState == TabCreationState.LIVE_IN_FOREGROUND && !openInForeground) {
+                 creationState = TabCreationState.LIVE_IN_BACKGROUND;
+             }
++            // A tab opened from a tab that lives in a Space belongs to the same Space.
++            // Chromium leaves a child tab ungrouped, so following a link out of a Space drops
++            // you out of it and the tab lands somewhere the rail is not showing. Pinned tabs
++            // are excluded deliberately: they sit outside every Space by design.
++            if (parent != null
++                    && !parent.getIsPinned()
++                    && parent.getTabGroupId() != null
++                    && tab.getTabGroupId() == null) {
++                tab.setTabGroupId(parent.getTabGroupId());
++            }
+             mTabModel.addTab(tab, position, type, creationState);
+             return tab;
+         }
