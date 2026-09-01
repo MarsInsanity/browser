@@ -31,6 +31,48 @@ Applied in this order, each on top of the last:
 3. **`arc.sh`** — the Arc layer: the sidebar, large-screen and pointer
    behaviour, appearance. See [ARC.md](ARC.md).
 
+## Being told about updates
+
+You should not have to remember to go looking. `tools/check_update.sh` answers
+both questions that matter in one go — is there a newer Chromium, and would the
+Arc layer survive it:
+
+```shell
+tools/check_update.sh
+```
+
+```
+Targeting Chromium : 152.0.7977.64
+Newest Vanadium    : 152.0.7977.64.0 (Chromium 152.0.7977.64)
+
+Up to date.
+```
+
+It reads the newest Vanadium tag off the remote and that tag's `args.gn` for
+the Chromium version it targets, then runs the patch check against it. No
+clone, no checkout, no build — a few hundred kilobytes and a couple of seconds.
+It exits `0` up to date, `10` when an update is available and every patch still
+applies, and `11` when an update is available but a patch needs re-anchoring.
+
+`.github/workflows/update-check.yml` runs it daily and opens an issue when
+there is something to do, which is what actually reaches you — GitHub emails
+issues opened against your own repository. One issue per Chromium version, so a
+release that sits untaken for a week does not produce a week of noise. The run
+also fails when a patch broke, so the repository's build badge shows it.
+
+It runs on a GitHub-hosted runner and costs nothing, unlike the build.
+
+### What this does not track
+
+The Chromium version comes from Vanadium, so that is what the check follows.
+Titanium's `patch.sh` is vendored into this repo as a copy rather than as a
+submodule, so improvements made upstream at
+[jqssun/android-titanium-browser](https://github.com/jqssun/android-titanium-browser)
+do not arrive on their own and are not watched here. That is a deliberate
+trade — a copy cannot break your build the day upstream changes — but it does
+mean glancing at that repository occasionally, particularly for anything
+touching extensions.
+
 ## Bumping
 
 The scheduled build in `.github/workflows/build.yml` moves the Vanadium

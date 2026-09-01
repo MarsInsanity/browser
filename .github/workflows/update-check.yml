@@ -1,0 +1,95 @@
+name: Check for Chromium updates
+
+# Watches for a newer Chromium and says whether this repo's patches would
+# survive it, so a version bump is something you are told about rather than
+# something you remember to go looking for.
+#
+# It opens an issue when a new version appears, which is what actually reaches
+# you: GitHub emails issues it opens against your own repository. One issue per
+# Chromium version, reused if the run repeats, so a version that sits
+# unreleased for a week does not produce a week of noise.
+#
+# Free to run: it downloads only the handful of files the patches touch, so it
+# needs no checkout, no self-hosted runner and no build.
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Check for a newer Chromium
+        id: check
+        run: |
+          set +e
+          output=$(bash tools/check_update.sh 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          {
+            echo 'report<<REPORT_EOF'
+            echo "$output"
+            echo 'REPORT_EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          version=$(echo "$output" | sed -n 's/.*(Chromium \([0-9.]*\)).*/\1/p' | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue if there is something to do
+        if: steps.check.outputs.code == '10' || steps.check.outputs.code == '11'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.check.outputs.version }}
+          REPORT: ${{ steps.check.outputs.report }}
+          CODE: ${{ steps.check.outputs.code }}
+        run: |
+          title="Chromium $VERSION is available"
+
+          # One issue per version. If it is already open, leave it alone.
+          existing=$(gh issue list --state open --search "$title in:title" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Already tracked in #$existing"
+            exit 0
+          fi
+
+          if [ "$CODE" = "10" ]; then
+            verdict="Every patch still applies. This bump should be uneventful."
+          else
+            verdict="**Some patch no longer applies** and needs re-anchoring before building. See [docs/UPDATING.md](../blob/main/docs/UPDATING.md)."
+          fi
+
+          gh issue create --title "$title" --body "$(cat <<EOF
+          $verdict
+
+          \`\`\`
+          $REPORT
+          \`\`\`
+
+          To take the update:
+
+          \`\`\`shell
+          cd vanadium && git fetch --tags && git checkout "\$(git tag | sort -V | tail -n1)" && cd ..
+          tools/verify_patches.sh
+          \`\`\`
+
+          Then build. Opened automatically by \`.github/workflows/update-check.yml\`.
+          EOF
+          )"
+
+      - name: Fail the run if a patch broke
+        if: steps.check.outputs.code == '11'
+        run: |
+          echo "A patch no longer applies to the newest Chromium." >&2
+          exit 1
