@@ -52,3 +52,13 @@ arc_patch "new tab button and Spaces sit at the bottom" \
     'android:id="@\+id/tab_list_recycler_view"' \
     '\|android:id="@+id/tab_list_recycler_view"|,+2 s|android:layout_height="wrap_content"|android:layout_height="0dp"|' \
     'android:layout_height="0dp"'
+
+# Filling the rail with the tab list costs it the bare background that hover
+# used to land on. The rail watches for the pointer from
+# dispatchGenericMotionEvent, but hover travels its own dispatch path and stops
+# at the first child that handles it — and the tab rows do, for their hover
+# cards. With the list covering the rail there is nothing left for the rail
+# itself to receive, and expand-on-hover stops working. Watch the hover path
+# too, so it does not matter what the pointer is actually over.
+arc_apply_patch "expand on hover survives the list filling the rail" \
+    "$ARC_ROOT/arc/patches/46-rail-hover.patch"

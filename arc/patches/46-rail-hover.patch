@@ -1,0 +1,20 @@
+--- a/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalTabRailLayout.java
++++ b/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalTabRailLayout.java
+@@ -159,6 +159,17 @@
+         return false;
+     }
+ 
++    @Override
++    protected boolean dispatchHoverEvent(MotionEvent event) {
++        // Hover reaches a view tree down its own dispatch path, not the generic-motion one
++        // that dispatchGenericMotionEvent above sits on, and a child that handles hover ends
++        // the walk there. The tab rows do handle it, for their hover cards, and the tab list
++        // covers the whole rail. Without this the rail would only learn about the pointer
++        // over whatever bare background it has left, which on a full rail is nothing.
++        expandOrCollapseOnHover(event);
++        return super.dispatchHoverEvent(event);
++    }
++
+     private void expandOrCollapseOnHover(@Nullable MotionEvent event) {
+         if (mExpandOrCollapseOnHoverListener == null) return;
+         if (!VerticalTabUtils.isExpandOnHoverEnabled()) return;
