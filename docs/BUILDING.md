@@ -27,9 +27,29 @@ ARCHS=arm64 ./build.sh
 base64-encoded, holding `local.properties` (`keyAlias`, `keyPassword`,
 `storePassword`) and the keystore itself.
 
-Keep that keystore. Android refuses to install a build signed with a different
-key over one already installed, so losing it means every user uninstalling and
-reinstalling, losing their data.
+Keep that keystore, and keep a backup of it somewhere private — a password
+manager or an encrypted archive. Android refuses to install a build signed with
+a different key over one already installed, so losing it means every user
+uninstalling and reinstalling, losing their data. It is the one file in this
+project that cannot be regenerated.
+
+On a build machine, keep it **outside the build tree** and mount it read-only,
+rather than dropping it in the checkout where a stray `git add` can reach it.
+For a container:
+
+```yaml
+    volumes:
+      - /volume2/mars:/work
+      - /volume2/mars-keys:/keys:ro
+```
+
+```shell
+export LOCAL_TEST_JKS=$(base64 -w0 /keys/local.properties)
+export STORE_TEST_JKS=$(base64 -w0 /keys/test.jks)
+```
+
+`build.sh` writes its own short-lived copy from those variables and deletes it
+when it finishes, so the mount only ever needs to be read.
 
 ## Under WSL2, on Windows
 
