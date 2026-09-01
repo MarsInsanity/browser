@@ -1,0 +1,77 @@
+--- a/chrome/android/java/res/values/ids.xml
++++ b/chrome/android/java/res/values/ids.xml
+@@ -152,6 +152,7 @@
+     <item type="id" name="add_to_existing_group_menu_item_id" />
+     <item type="id" name="pin_tab_menu_id" />
+     <item type="id" name="unpin_tab_menu_id" />
++    <item type="id" name="arc_set_pinned_home_menu_id" />
+     <item type="id" name="mute_site_menu_id" />
+     <item type="id" name="unmute_site_menu_id" />
+     <item type="id" name="new_window_menu_id" />
+--- a/chrome/android/java/src/org/chromium/chrome/browser/compositor/overlays/strip/TabContextMenuCoordinator.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/compositor/overlays/strip/TabContextMenuCoordinator.java
+@@ -50,6 +50,7 @@
+ import org.chromium.chrome.browser.tab.Tab;
+ import org.chromium.chrome.browser.tab.TabLaunchType;
+ import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
++import org.chromium.chrome.browser.tabmodel.PinnedTabClosureManager;
+ import org.chromium.chrome.browser.tabmodel.TabClosingSource;
+ import org.chromium.chrome.browser.tabmodel.TabClosureParams;
+ import org.chromium.chrome.browser.tabmodel.TabClosureParamsUtils;
+@@ -354,6 +355,12 @@
+                 pinTabItemCallback(tabModel, tabs);
+             } else if (menuId == R.id.unpin_tab_menu_id) {
+                 unpinTabItemCallback(tabModel, tabs);
++            } else if (menuId == R.id.arc_set_pinned_home_menu_id) {
++                for (Tab pinnedTab : tabs) {
++                    if (pinnedTab.getIsPinned()) {
++                        PinnedTabClosureManager.getInstance().recordPinnedHome(pinnedTab);
++                    }
++                }
+             } else if (menuId == R.id.mute_site_menu_id) {
+                 muteSiteItemCallback(tabModel, tabs);
+             } else if (menuId == R.id.unmute_site_menu_id) {
+@@ -700,6 +707,9 @@
+             itemList.add(createDuplicateTabsItem(isIncognito));
+         }
+         itemList.add(createPinUnpinTabItem(tabs, isIncognito));
++        if (tabs.size() == 1 && tabs.get(0).getIsPinned()) {
++            itemList.add(createSetPinnedHomeItem(isIncognito));
++        }
+         itemList.add(createMuteUnmuteSiteItem(tabs, isIncognito));
+         if (ChromeFeatureList.sAndroidContextMenuNewActions.isEnabled()) {
+             itemList.add(buildMenuDivider(isIncognito));
+@@ -921,6 +931,22 @@
+                 .withIsIncognito(isIncognito)
+                 .build();
+     }
++
++    /**
++     * Re-points a pinned tab at whatever it is showing now, so that closing it comes back
++     * here rather than to wherever it was when it was first pinned.
++     *
++     * <p>The title is not a string resource. Adding one means a new message in
++     * android_chrome_strings.grd, which is a translated file this fork has no business
++     * growing; the cost is that this one item is English everywhere.
++     */
++    private ListItem createSetPinnedHomeItem(boolean isIncognito) {
++        return new ListItemBuilder()
++                .withTitle("Set as pinned home")
++                .withMenuId(R.id.arc_set_pinned_home_menu_id)
++                .withIsIncognito(isIncognito)
++                .build();
++    }
+ 
+     private ListItem createPinUnpinTabItem(List<Tab> tabs, boolean isIncognito) {
+         boolean showUnpin = true;
+--- a/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/PinnedTabClosureManager.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/PinnedTabClosureManager.java
+@@ -55,7 +55,7 @@
+      * Returns the singleton instance of {@link PinnedTabClosureManager}, creating it if necessary.
+      * Must be called on the UI thread.
+      */
+-    static PinnedTabClosureManager getInstance() {
++    public static PinnedTabClosureManager getInstance() {
+         return PinnedTabClosureManagerHolder.INSTANCE;
+     }
+ 
