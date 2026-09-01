@@ -10,7 +10,15 @@
  
  import androidx.annotation.VisibleForTesting;
  import androidx.recyclerview.widget.GridLayoutManager;
-@@ -113,6 +116,18 @@
+@@ -55,6 +58,7 @@
+ import org.chromium.chrome.browser.tabmodel.TabCreatorUtil;
+ import org.chromium.chrome.browser.tabmodel.TabGroupUtils.TabGroupCreationCallback;
+ import org.chromium.chrome.browser.tabmodel.TabModel;
++import org.chromium.chrome.browser.tabmodel.TabGroupObserver;
+ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+ import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
+ import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
+@@ -113,6 +117,50 @@
      private static @Nullable Supplier<TabSwitcherDragHandler>
              sTabSwitcherDragHandlerSupplierForTesting;
      private final VerticalTabRailLayout mContainerView;
@@ -22,6 +30,38 @@
 +    private @Nullable LinearLayout mSpacesBar;
 +    private @Nullable HorizontalScrollView mSpacesScroll;
 +    private @Nullable SimpleRecyclerViewAdapter mAdapter;
++    private @Nullable TabModel mSpacesObservedModel;
++
++    // Making, renaming or dissolving a Space has to reach the chips. TabModelObserver has no
++    // callback for any of it — a tab joining a new group need not move — so the chips went
++    // stale until something else happened to rebuild them.
++    private final TabGroupObserver mSpacesGroupObserver =
++            new TabGroupObserver() {
++                @Override
++                public void didCreateNewGroup(Tab destinationTab, TabModel tabModel) {
++                    refreshSpacesBar();
++                }
++
++                @Override
++                public void didChangeTabGroupTitle(Token tabGroupId, String newTitle) {
++                    refreshSpacesBar();
++                }
++
++                @Override
++                public void didMergeTabToGroup(Tab movedTab, boolean isDestinationTab) {
++                    refreshSpacesBar();
++                }
++
++                @Override
++                public void didMoveTabOutOfGroup(Tab movedTab, int prevFilterIndex) {
++                    refreshSpacesBar();
++                }
++
++                @Override
++                public void committedTabGroupClosure(Token tabGroupId, boolean wasHiding) {
++                    refreshSpacesBar();
++                }
++            };
 +
 +    // Trackpad scroll arrives as a stream of small deltas, so it is accumulated until it is
 +    // worth a Space change and then reset.
@@ -29,7 +69,7 @@
      private final TabListFaviconProvider mTabListFaviconProvider;
      private final TabListModel mModelList;
      private final TabListMediator mMediator;
-@@ -243,6 +258,11 @@
+@@ -243,6 +291,11 @@
                      @Override
                      public int getItemViewType(int position) {
                          ListItem item = mModelList.get(position);
@@ -41,7 +81,7 @@
                          if (item.type == UiType.TAB) {
                              if (TabProperties.isPinnedTab(item.model)) {
                                  return UiType.PINNED_TAB;
-@@ -299,6 +319,9 @@
+@@ -299,6 +352,9 @@
          mContainerView.setLayoutParams(
                  new ViewGroup.LayoutParams(
                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -51,7 +91,7 @@
  
          @SuppressWarnings("NullAway")
          Supplier<@Nullable TabContentManager> nullableSupplier = tabContentManagerSupplier;
-@@ -616,7 +639,15 @@
+@@ -616,7 +672,15 @@
          mTabModelSelectorTabModelObserver =
                  new TabModelSelectorTabModelObserver(tabModelSelector) {
                      @Override
@@ -67,7 +107,7 @@
                          if (mIsActive) {
                              scrollActiveTabIntoView();
                          }
-@@ -631,6 +662,7 @@
+@@ -631,6 +695,7 @@
                      @Override
                      public void tabClosureCommitted(Tab tab) {
                          mTabHoverCardController.hideHoverCard();
@@ -75,7 +115,7 @@
                      }
  
                      @Override
-@@ -639,6 +671,8 @@
+@@ -639,6 +704,8 @@
                      }
                  };
  
@@ -84,7 +124,18 @@
          mVerticalTabsActiveSupplier.addSyncObserverAndCallIfNonNull(mActiveObserver);
  
          // Context menus should not appear upon right-clicking the new tab button or the collapse
-@@ -719,6 +753,12 @@
+@@ -687,6 +754,10 @@
+         }
+ 
+         mSpineDecoration.destroy();
++        if (mSpacesObservedModel != null) {
++            mSpacesObservedModel.removeTabGroupObserver(mSpacesGroupObserver);
++            mSpacesObservedModel = null;
++        }
+         mTabModelSelectorTabModelObserver.destroy();
+         mVerticalTabsActiveSupplier.removeObserver(mActiveObserver);
+         for (TabSwitcherDragHandler dragHandler : mTabSwitcherDragHandlers) {
+@@ -719,6 +790,12 @@
      void setRailCollapseState(@RailCollapseState int railCollapseState) {
          mContainerModel.set(VerticalTabListProperties.COLLAPSE_STATE, railCollapseState);
          updatePinnedLayoutSpanCount();
@@ -97,10 +148,17 @@
          mCollapseController.setRailCollapseStateSupplierValue(railCollapseState);
      }
  
-@@ -802,12 +842,202 @@
+@@ -802,12 +879,209 @@
                  /* tabGroupSyncIds */ null,
                  /* quickMode */ false);
          mPinnedTabsMediator.updateTabModel(tabModel);
++        if (mSpacesObservedModel != tabModel) {
++            if (mSpacesObservedModel != null) {
++                mSpacesObservedModel.removeTabGroupObserver(mSpacesGroupObserver);
++            }
++            tabModel.addTabGroupObserver(mSpacesGroupObserver);
++            mSpacesObservedModel = tabModel;
++        }
 +        rebuildSpacesBar(tabModel);
          boolean isIncognito =
                  !IncognitoUtils.shouldOpenIncognitoAsWindow() && tabModel.isIncognitoBranded();
