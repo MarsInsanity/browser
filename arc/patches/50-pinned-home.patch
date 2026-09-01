@@ -1,37 +1,55 @@
 --- a/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/PinnedTabClosureManager.java
 +++ b/chrome/android/java/src/org/chromium/chrome/browser/tabmodel/PinnedTabClosureManager.java
-@@ -14,7 +14,9 @@
+@@ -5,16 +5,23 @@
+ package org.chromium.chrome.browser.tabmodel;
+ 
+ import android.content.Context;
++import android.content.SharedPreferences;
+ 
+ import androidx.annotation.VisibleForTesting;
+ 
++import org.chromium.base.ContextUtils;
+ import org.chromium.base.task.PostTask;
+ import org.chromium.base.task.TaskTraits;
+ import org.chromium.build.annotations.NullMarked;
  import org.chromium.build.annotations.Nullable;
  import org.chromium.chrome.R;
  import org.chromium.chrome.browser.tab.Tab;
 +import org.chromium.content_public.browser.LoadUrlParams;
++import org.chromium.content_public.browser.NavigationController;
++import org.chromium.content_public.browser.NavigationEntry;
++import org.chromium.content_public.browser.WebContents;
  import org.chromium.ui.widget.Toast;
 +import org.chromium.url.GURL;
  
  import java.util.HashMap;
  import java.util.Objects;
-@@ -26,6 +28,13 @@
+@@ -24,8 +31,17 @@
+ public class PinnedTabClosureManager {
+     private static final long CONFIRM_TIMEOUT_MS = 4000;
  
++    // Where a pinned tab goes when it is closed, keyed by tab ID. Written through
++    // to disk because a tab keeps its ID across a restart, so the browser coming
++    // back should not lose where its pinned tabs live.
++    private static final String PINNED_HOME_PREFS = "arc_pinned_home";
++
      // Maps the selector to the ID of the pinned tab currently awaiting confirmation.
      private final HashMap<TabModelSelector, Integer> mPendingPinnedTabs = new HashMap<>();
 +
-+    // Maps a pinned tab's ID to the URL it was showing when it was pinned. Closing such a tab
-+    // returns it to that URL rather than removing it, which is how a pinned tab behaves in Arc.
-+    // Not persisted across restarts: a tab with no entry here falls back to the confirmation
-+    // flow below, which is also the escape hatch for closing a pinned tab outright.
++    // In-memory view of the above, to keep the common path off the disk.
 +    private final HashMap<Integer, GURL> mPinnedHomeUrls = new HashMap<>();
 +
      private @Nullable Toast mCurrentToast;
  
      private PinnedTabClosureManager() {}
-@@ -63,6 +72,16 @@
+@@ -63,6 +79,16 @@
              return true;
          }
  
-+        // A pinned tab that has been navigated away from where it was pinned goes back there
-+        // instead of closing. Closing it again once it is home falls through to the
-+        // confirmation flow below.
-+        GURL home = mPinnedHomeUrls.get(tab.getId());
++        // A pinned tab that has been navigated away from where it was pinned goes back
++        // there instead of closing. Closing it again once it is home falls through to
++        // the confirmation flow below, which stays the way to close one outright.
++        GURL home = getPinnedHome(tab);
 +        if (home != null && !home.equals(tab.getUrl())) {
 +            clearPendingState(selector);
 +            tab.loadUrl(new LoadUrlParams(home));
@@ -41,21 +59,56 @@
          int pendingTabId = mPendingPinnedTabs.getOrDefault(selector, Tab.INVALID_TAB_ID);
          int tabId = tab.getId();
  
-@@ -89,6 +108,19 @@
+@@ -89,6 +115,54 @@
          return false;
      }
  
-+    /** Records the URL a tab was showing at the moment it was pinned. */
-+    public void recordPinnedHome(Tab tab) {
-+        GURL url = tab.getUrl();
-+        if (!url.isEmpty()) {
-+            mPinnedHomeUrls.put(tab.getId(), url);
-+        }
++    private static SharedPreferences pinnedHomePrefs() {
++        return ContextUtils.getApplicationContext()
++                .getSharedPreferences(PINNED_HOME_PREFS, Context.MODE_PRIVATE);
 +    }
 +
-+    /** Forgets the pinned URL of a tab that is no longer pinned. */
++    /** Records where closing this tab should send it, as of now. */
++    public void recordPinnedHome(Tab tab) {
++        GURL url = tab.getUrl();
++        if (url.isEmpty()) return;
++        mPinnedHomeUrls.put(tab.getId(), url);
++        pinnedHomePrefs().edit().putString(String.valueOf(tab.getId()), url.getSpec()).apply();
++    }
++
++    /** Forgets a tab's pinned URL, for when it stops being pinned. */
 +    public void forgetPinnedHome(int tabId) {
 +        mPinnedHomeUrls.remove(tabId);
++        pinnedHomePrefs().edit().remove(String.valueOf(tabId)).apply();
++    }
++
++    /**
++     * Where closing this pinned tab should send it.
++     *
++     * <p>What was recorded when it was pinned, if that is still known, and otherwise
++     * the first page in the tab's own history. The fallback matters: a tab restored
++     * with Ctrl+Shift+T comes back under a new ID with no record against it, and a
++     * tab restored at startup is pinned straight from its saved state without ever
++     * passing through the code that records one.
++     */
++    private @Nullable GURL getPinnedHome(Tab tab) {
++        GURL home = mPinnedHomeUrls.get(tab.getId());
++        if (home != null) return home;
++
++        String stored = pinnedHomePrefs().getString(String.valueOf(tab.getId()), null);
++        if (stored != null && !stored.isEmpty()) {
++            home = new GURL(stored);
++            mPinnedHomeUrls.put(tab.getId(), home);
++            return home;
++        }
++
++        WebContents webContents = tab.getWebContents();
++        if (webContents == null) return null;
++        NavigationController controller = webContents.getNavigationController();
++        if (controller == null) return null;
++        NavigationEntry first = controller.getEntryAtIndex(0);
++        if (first == null || first.getUrl().isEmpty()) return null;
++        return first.getUrl();
 +    }
 +
      @VisibleForTesting

@@ -25,6 +25,34 @@ arc_section "Pinned tabs"
 
 VT_LIST=chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalTabListCoordinator.java
 
+PINNED_ITEM=chrome/android/features/tab_ui/java/res/layout/vertical_tab_pinned_item.xml
+DIMENS=chrome/android/features/tab_ui/java/res/values/dimens.xml
+
+# Upstream gives the tile a fixed 42dp width, which was right when the column
+# count was derived from it. With a fixed three-column grid the cell is about
+# 72dp wide and a 42dp tile leaves most of it empty, which is what makes the
+# rail look sparse rather than deliberate. Fill the cell instead.
+arc_patch "pinned tiles fill their grid cell" \
+    "$PINNED_ITEM" \
+    'android:layout_width="@dimen/vertical_tab_pinned_item_width"' \
+    's|android:layout_width="@dimen/vertical_tab_pinned_item_width"|android:layout_width="match_parent"|' \
+    'android:layout_width="match_parent"'
+
+# A tile that is ~64dp wide and 32dp tall is a letterbox. Square it up.
+arc_patch "pinned tiles are square rather than letterboxed" \
+    "$DIMENS" \
+    '<dimen name="vertical_tab_pinned_item_height">32dp</dimen>' \
+    's|<dimen name="vertical_tab_pinned_item_height">32dp</dimen>|<dimen name="vertical_tab_pinned_item_height">64dp</dimen>|' \
+    '<dimen name="vertical_tab_pinned_item_height">64dp</dimen>'
+
+# The tile only had a bottom margin, so filling the cell would butt neighbours
+# against each other. The same margin on every side gives the grid its gutters.
+arc_patch "pinned tiles have gutters on every side" \
+    "$PINNED_ITEM" \
+    'android:layout_marginBottom="@dimen/vertical_tab_item_margin_bottom"' \
+    's|android:layout_marginBottom="@dimen/vertical_tab_item_margin_bottom"|android:layout_margin="@dimen/vertical_tab_item_margin_bottom"|' \
+    'android:layout_margin="@dimen/vertical_tab_item_margin_bottom"'
+
 # Three columns rather than up to four.
 arc_patch "pinned tabs use a three-column grid" \
     "$VT_LIST" \
