@@ -69,18 +69,19 @@
                          () -> updatePinnedState(tabId, /* isPinned= */ true),
 --- a/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/StaticPinnedTabsMediator.java
 +++ b/chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/StaticPinnedTabsMediator.java
-@@ -6,7 +6,10 @@
+@@ -6,7 +6,11 @@
  
  import org.chromium.build.annotations.NullMarked;
  import org.chromium.build.annotations.Nullable;
 +import org.chromium.base.Token;
-+import org.chromium.base.supplier.Supplier;
  import org.chromium.chrome.browser.tab.Tab;
 +import org.chromium.chrome.browser.tabmodel.PinnedTabClosureManager;
++
++import java.util.function.Supplier;
  import org.chromium.chrome.browser.tabmodel.TabModel;
  import org.chromium.chrome.browser.tabmodel.TabModelObserver;
  import org.chromium.ui.modelutil.ListObservable;
-@@ -27,6 +30,10 @@
+@@ -27,6 +31,10 @@
  public class StaticPinnedTabsMediator {
      private @Nullable TabModel mTabModel;
      private final TabListModel mMainModelList;
@@ -91,7 +92,7 @@
      private final TabListModel mPinnedModelList;
      private final TabModelObserver mTabModelObserver;
      private final ListObservable.ListObserver<Void> mMainListObserver;
-@@ -177,11 +184,38 @@
+@@ -177,11 +185,38 @@
          updatePinnedTabsList();
      }
  
@@ -131,7 +132,7 @@
                  mPinnedModelList.add(item);
              }
          }
-@@ -190,6 +224,7 @@
+@@ -190,6 +225,7 @@
  
      private void addListItemToPinnedModelList(ListItem item) {
          if (mPinnedModelList.indexOf(item) != TabModel.INVALID_TAB_INDEX) return;
